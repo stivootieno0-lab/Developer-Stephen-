@@ -45,17 +45,19 @@ jobs:
 
       - name: Prepare artifact
         run: |
-          mkdir -p artifact
+          BT="$ANDROID_SDK_ROOT/build-tools/35.0.0"
+          mkdir -p artifact/lib64
           cp StiCode-Android-v3.0.0/app/build/outputs/apk/release/app-release-unsigned.apk artifact/StiCode-v3.0.0-unsigned.apk
-          cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/zipalign" artifact/zipalign
-          cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" artifact/apksigner
-          cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" artifact/apksigner.jar
-          cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt2" artifact/aapt2
+          cp "$BT/zipalign" artifact/zipalign
+          cp "$BT/apksigner" artifact/apksigner
+          cp "$BT/lib/apksigner.jar" artifact/apksigner.jar
+          cp "$BT/aapt2" artifact/aapt2
+          cp "$BT/lib64/libc++.so" artifact/lib64/libc++.so
           chmod +x artifact/zipalign artifact/apksigner artifact/aapt2
 
       - name: Upload build output
         uses: actions/upload-artifact@v4
         with:
-          name: sticode-v3-build
+          name: sticode-v3-build-complete
           path: artifact
           if-no-files-found: error
