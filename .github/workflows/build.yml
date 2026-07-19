@@ -22,8 +22,14 @@ jobs:
           import base64, pathlib, zipfile
           root=pathlib.Path('.')
           chunks=sorted(root.glob('suite-source.b64.*'))
-          data=''.join(p.read_text() for p in chunks)
-          pathlib.Path('/tmp/suite.zip').write_bytes(base64.b64decode(data))
+          pieces=[]
+          alphabet=set(b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\r\n')
+          for part in chunks:
+              raw=part.read_bytes()
+              if raw and set(raw) <= alphabet:
+                  raw=base64.b64decode(raw)
+              pieces.append(raw)
+          pathlib.Path('/tmp/suite.zip').write_bytes(b''.join(pieces))
           with zipfile.ZipFile('/tmp/suite.zip') as z: z.extractall('/tmp/suite')
           PY
       - name: Build Android release
@@ -60,10 +66,21 @@ jobs:
       - name: Decode source
         shell: pwsh
         run: |
-          $chunks = Get-ChildItem suite-source.b64.* | Sort-Object Name
-          $text = ($chunks | ForEach-Object { Get-Content $_ -Raw }) -join ''
-          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\suite.zip", [Convert]::FromBase64String($text))
-          Expand-Archive "$env:RUNNER_TEMP\suite.zip" "$env:RUNNER_TEMP\suite"
+          @'
+          import base64, pathlib, zipfile, os
+          root=pathlib.Path('.')
+          chunks=sorted(root.glob('suite-source.b64.*'))
+          pieces=[]
+          alphabet=set(b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\r\n')
+          for part in chunks:
+              raw=part.read_bytes()
+              if raw and set(raw) <= alphabet:
+                  raw=base64.b64decode(raw)
+              pieces.append(raw)
+          target=pathlib.Path(os.environ['RUNNER_TEMP'])/'suite.zip'
+          target.write_bytes(b''.join(pieces))
+          with zipfile.ZipFile(target) as z: z.extractall(pathlib.Path(os.environ['RUNNER_TEMP'])/'suite')
+          '@ | python -
       - name: Build Windows executable
         shell: pwsh
         run: |
