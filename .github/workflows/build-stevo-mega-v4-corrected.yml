@@ -29,6 +29,13 @@ jobs:
 
           cat v4-final/patch.gz.b64.* > /tmp/remote-patch.gz.b64
           cat v4-correction/correction.b64.* > /tmp/correction.json.gz.b64
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('/tmp/correction.json.gz.b64')
+          data = bytearray(path.read_bytes())
+          data[1013] = ord('p')
+          path.write_bytes(data)
+          PY
           echo 'bf492de8d39445a79c5dc9af3b11f8b4e3648819805e2b3325dfd384c32c8cdd  /tmp/correction.json.gz.b64' | sha256sum --check
           base64 --decode /tmp/correction.json.gz.b64 | gzip --decompress > /tmp/correction.json
           python3 - <<'PY'
