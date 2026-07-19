@@ -3,6 +3,8 @@ name: Build StiCode v3
 on:
   push:
     branches: [sticode-v3-stevo]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
