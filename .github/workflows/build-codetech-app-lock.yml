@@ -18,7 +18,8 @@ jobs:
           gradle-version: '8.9'
       - name: Decode source
         run: |
-          base64 -d applock-source.b64 > /tmp/codetech-app-lock.zip
+          cat applock-source.00 applock-source.01 applock-source.02 applock-source.03 applock-source.04 | base64 -d > /tmp/codetech-app-lock.zip
+          unzip -t /tmp/codetech-app-lock.zip
           unzip -q /tmp/codetech-app-lock.zip -d /tmp/codetech-app-lock
       - name: Build release
         working-directory: /tmp/codetech-app-lock/CodeTech-App-Lock
