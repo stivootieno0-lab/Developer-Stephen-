@@ -32,6 +32,9 @@ jobs:
           pathlib.Path('/tmp/suite.zip').write_bytes(b''.join(pieces))
           with zipfile.ZipFile('/tmp/suite.zip') as z: z.extractall('/tmp/suite')
           PY
+      - name: Apply Android compiler fixes
+        working-directory: /tmp/suite/CodeTech-Camera-Suite
+        run: patch -p1 < "$GITHUB_WORKSPACE/android-fixes.patch"
       - name: Build Android release
         working-directory: /tmp/suite/CodeTech-Camera-Suite/android
         run: |

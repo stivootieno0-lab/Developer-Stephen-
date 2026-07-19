@@ -1,0 +1,23 @@
+--- a/android/app/src/main/java/com/codetech/camera/NetworkBridgeService.java
++++ b/android/app/src/main/java/com/codetech/camera/NetworkBridgeService.java
+@@ -105,9 +105,20 @@
+         files.sort((a, b) -> Long.compare(b.lastModified(), a.lastModified())); return files;
+     }
+     private String query(String path, String key) {
+-        int q = path.indexOf('?'); if (q < 0) return "";
+-        for (String pair : path.substring(q + 1).split("&")) { String[] kv = pair.split("=", 2); if (kv.length == 2 && kv[0].equals(key)) return URLDecoder.decode(kv[1], "UTF-8"); }
++        int q = path.indexOf('?');
++        if (q < 0) return "";
++        for (String pair : path.substring(q + 1).split("&")) {
++            String[] kv = pair.split("=", 2);
++            if (kv.length == 2 && kv[0].equals(key)) {
++                try {
++                    return URLDecoder.decode(kv[1], "UTF-8");
++                } catch (Exception ignored) {
++                    return kv[1];
++                }
++            }
++        }
+         return "";
+     }
+     private void response(BufferedOutputStream out, int code, String type, byte[] body) throws Exception {
