@@ -34,7 +34,15 @@ jobs:
           PY
       - name: Build Android release
         working-directory: /tmp/suite/CodeTech-Camera-Suite/android
-        run: gradle assembleRelease --stacktrace
+        run: |
+          set -o pipefail
+          gradle assembleRelease --stacktrace 2>&1 | tee /tmp/android-build.log
+      - name: Upload Android compiler log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codetech-camera-android-build-log
+          path: /tmp/android-build.log
       - name: Create signing key and sign
         run: |
           mkdir -p /tmp/release/android
