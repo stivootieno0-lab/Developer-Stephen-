@@ -33,8 +33,11 @@ jobs:
       - name: Install Android API 35
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Extract project
-        run: unzip -q source.zip
+      - name: Rebuild and extract project
+        run: |
+          cat chunks/source.*.b64 | base64 --decode > source.zip
+          unzip -t source.zip
+          unzip -q source.zip
 
       - name: Build unsigned release APK
         working-directory: StiCode-Android-v3.0.0
@@ -47,7 +50,8 @@ jobs:
           cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/zipalign" artifact/zipalign
           cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" artifact/apksigner
           cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" artifact/apksigner.jar
-          chmod +x artifact/zipalign artifact/apksigner
+          cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt2" artifact/aapt2
+          chmod +x artifact/zipalign artifact/apksigner artifact/aapt2
 
       - name: Upload build output
         uses: actions/upload-artifact@v4
