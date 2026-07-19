@@ -1,0 +1,59 @@
+name: Build CodeTech App Lock
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Decode source
+        run: |
+          base64 -d applock-source.b64 > /tmp/codetech-app-lock.zip
+          unzip -q /tmp/codetech-app-lock.zip -d /tmp/codetech-app-lock
+      - name: Build release
+        working-directory: /tmp/codetech-app-lock/CodeTech-App-Lock
+        run: gradle assembleRelease --stacktrace
+      - name: Sign and validate
+        run: |
+          mkdir -p /tmp/release
+          keytool -genkeypair -v \
+            -keystore /tmp/release/codetech-app-lock-release.jks \
+            -storepass CodeTechAppLock2026 \
+            -keypass CodeTechAppLock2026 \
+            -alias codetechapplock \
+            -keyalg RSA -keysize 3072 -validity 10000 \
+            -dname "CN=CodeTech App Lock, OU=CodeTech Software Solutions, O=CodeTech Software Solutions, L=Nairobi, ST=Nairobi, C=KE"
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          UNSIGNED=/tmp/codetech-app-lock/CodeTech-App-Lock/app/build/outputs/apk/release/app-release-unsigned.apk
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED" /tmp/release/CodeTech-App-Lock-v1.0.0-aligned.apk
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks /tmp/release/codetech-app-lock-release.jks \
+            --ks-pass pass:CodeTechAppLock2026 \
+            --key-pass pass:CodeTechAppLock2026 \
+            --ks-key-alias codetechapplock \
+            --out /tmp/release/CodeTech-App-Lock-v1.0.0.apk \
+            /tmp/release/CodeTech-App-Lock-v1.0.0-aligned.apk
+          "$BUILD_TOOLS/zipalign" -c -p 4 /tmp/release/CodeTech-App-Lock-v1.0.0.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs /tmp/release/CodeTech-App-Lock-v1.0.0.apk > /tmp/release/APK-VALIDATION.txt
+          "$BUILD_TOOLS/aapt2" dump badging /tmp/release/CodeTech-App-Lock-v1.0.0.apk > /tmp/release/APK-BADGING.txt
+          sha256sum /tmp/release/CodeTech-App-Lock-v1.0.0.apk > /tmp/release/CodeTech-App-Lock-v1.0.0.sha256
+          cat > /tmp/release/KEEP-PRIVATE.txt <<'TXT'
+          Keep codetech-app-lock-release.jks private. Future updates for com.codetech.applock must use this same signing key.
+          Alias: codetechapplock
+          Store password: CodeTechAppLock2026
+          Key password: CodeTechAppLock2026
+          TXT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codetech-app-lock-release
+          path: /tmp/release
