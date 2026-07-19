@@ -31,7 +31,7 @@ jobs:
           patch -p1 < /tmp/stevo-v4.patch
           grep -q "applicationId 'com.codetech.sticode.mega'" app/build.gradle
           grep -q "versionName '4.0.0'" app/build.gradle
-          grep -q 'ESTIMATED_PHRASE_COMBINATIONS = 8_640_000L' app/src/main/java/com/codetech/sticode/MegaCommandRouter.java
+          grep -q 'ESTIMATED_PHRASE_VARIATIONS = 8_640_000L' app/src/main/java/com/codetech/sticode/MegaCommandRouter.java
           cd /tmp/source
           mv StiCode-Android-v3.0.0 Stevo-Mega-Android-v4.0.0
           zip -qr /tmp/Stevo-Mega-Android-v4.0.0-Source.zip Stevo-Mega-Android-v4.0.0
