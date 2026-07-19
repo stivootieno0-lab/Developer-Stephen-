@@ -1,6 +1,6 @@
 --- a/android/app/src/main/java/com/codetech/camera/NetworkBridgeService.java
 +++ b/android/app/src/main/java/com/codetech/camera/NetworkBridgeService.java
-@@ -105,9 +105,20 @@
+@@ -106,8 +106,18 @@
          files.sort((a, b) -> Long.compare(b.lastModified(), a.lastModified())); return files;
      }
      private String query(String path, String key) {
