@@ -13,38 +13,40 @@ jobs:
       - name: Assemble repository patch and correction representations
         run: |
           set -euo pipefail
+          mkdir -p /tmp/stevo-v5-inspection
           cat \
             v5/patch/patch.gz.hex.00 \
             v5/patch/patch.gz.hex.01 \
             v5/patch/patch.gz.hex.015 \
             v5/patch/patch.gz.hex.02 \
             v5/patch/patch.gz.hex.03 \
-            > /tmp/remote-stevo-v5.patch.gz.hex
+            > /tmp/stevo-v5-inspection/remote-stevo-v5.patch.gz.hex
           cat \
             v5/correction/correction.zst.hex.00 \
             v5/correction/correction.zst.hex.01a \
             v5/correction/correction.zst.hex.01b \
             v5/correction/correction.zst.hex.01c \
             v5/correction/correction.zst.hex.01d \
-            > /tmp/remote-stevo-v5-correction.zst.hex
-          wc -c /tmp/remote-stevo-v5.patch.gz.hex > /tmp/remote-patch-length.txt
-          sha256sum /tmp/remote-stevo-v5.patch.gz.hex > /tmp/remote-patch-sha256.txt
-          wc -c /tmp/remote-stevo-v5-correction.zst.hex > /tmp/remote-correction-length.txt
-          sha256sum /tmp/remote-stevo-v5-correction.zst.hex > /tmp/remote-correction-sha256.txt
+            > /tmp/stevo-v5-inspection/remote-stevo-v5-correction.zst.hex
+          cd /tmp/stevo-v5-inspection
+          wc -c remote-stevo-v5.patch.gz.hex > remote-patch-length.txt
+          sha256sum remote-stevo-v5.patch.gz.hex > remote-patch-sha256.txt
+          wc -c remote-stevo-v5-correction.zst.hex > remote-correction-length.txt
+          sha256sum remote-stevo-v5-correction.zst.hex > remote-correction-sha256.txt
           python3 - <<'PY'
           from pathlib import Path
-          h=''.join(Path('/tmp/remote-stevo-v5-correction.zst.hex').read_text().split())
-          Path('/tmp/remote-stevo-v5-correction.zst').write_bytes(bytes.fromhex(h))
+          h=''.join(Path('remote-stevo-v5-correction.zst.hex').read_text().split())
+          Path('remote-stevo-v5-correction.zst').write_bytes(bytes.fromhex(h))
           PY
-          sha256sum /tmp/remote-stevo-v5-correction.zst > /tmp/remote-correction-binary-sha256.txt
-          zstd --decompress --patch-from=/tmp/remote-stevo-v5.patch.gz.hex \
-            /tmp/remote-stevo-v5-correction.zst --output=/tmp/reconstructed-stevo-v5.patch.gz.hex --force || true
-          if [ -f /tmp/reconstructed-stevo-v5.patch.gz.hex ]; then
-            wc -c /tmp/reconstructed-stevo-v5.patch.gz.hex > /tmp/reconstructed-length.txt
-            sha256sum /tmp/reconstructed-stevo-v5.patch.gz.hex > /tmp/reconstructed-sha256.txt
+          sha256sum remote-stevo-v5-correction.zst > remote-correction-binary-sha256.txt
+          zstd --decompress --patch-from=remote-stevo-v5.patch.gz.hex \
+            remote-stevo-v5-correction.zst --output=reconstructed-stevo-v5.patch.gz.hex --force || true
+          if [ -f reconstructed-stevo-v5.patch.gz.hex ]; then
+            wc -c reconstructed-stevo-v5.patch.gz.hex > reconstructed-length.txt
+            sha256sum reconstructed-stevo-v5.patch.gz.hex > reconstructed-sha256.txt
           fi
       - uses: actions/upload-artifact@v4
         with:
           name: stevo-v5-patch-inspection
-          path: /tmp/*stevo-v5* /tmp/remote-*.txt /tmp/reconstructed-*.txt
+          path: /tmp/stevo-v5-inspection
           if-no-files-found: error
