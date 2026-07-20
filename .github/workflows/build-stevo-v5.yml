@@ -60,7 +60,23 @@ jobs:
             v5/patch/patch.gz.hex.015 \
             v5/patch/patch.gz.hex.02 \
             v5/patch/patch.gz.hex.03 \
-            > /tmp/stevo-v5.patch.gz.hex
+            > /tmp/remote-stevo-v5.patch.gz.hex
+          cat \
+            v5/correction/correction.zst.hex.00 \
+            v5/correction/correction.zst.hex.01a \
+            v5/correction/correction.zst.hex.01b \
+            v5/correction/correction.zst.hex.01c \
+            v5/correction/correction.zst.hex.01d \
+            > /tmp/stevo-v5-correction.zst.hex
+          echo '136a998fc2d1d803a59f6cd70d619d6fb3349c792138b8fa4da31d21c82b5e7f  /tmp/stevo-v5-correction.zst.hex' | sha256sum --check
+          python3 - <<'PY'
+          from pathlib import Path
+          correction_hex = ''.join(Path('/tmp/stevo-v5-correction.zst.hex').read_text().split())
+          Path('/tmp/stevo-v5-correction.zst').write_bytes(bytes.fromhex(correction_hex))
+          PY
+          echo 'df311142e64246de241b3b226fa8de606755160a265a9d62946a34c0cb7e0158  /tmp/stevo-v5-correction.zst' | sha256sum --check
+          zstd --decompress --patch-from=/tmp/remote-stevo-v5.patch.gz.hex \
+            /tmp/stevo-v5-correction.zst --output=/tmp/stevo-v5.patch.gz.hex --force
           echo '947a605407141c589cca94d31a395cc033bebfd662dd46fb4edfe65cf71a347f  /tmp/stevo-v5.patch.gz.hex' | sha256sum --check
           python3 - <<'PY'
           from pathlib import Path
