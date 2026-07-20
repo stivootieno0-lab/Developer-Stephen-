@@ -88,10 +88,13 @@ jobs:
           echo '7dfb565b84bea1cd04528054d8142c838682618a247f6f49c623319e2fd7eea5  /tmp/stevo-v5.patch' | sha256sum --check
           cd /tmp/source/Stevo-Mega-Android-v5.0.0
           patch -p1 < /tmp/stevo-v5.patch
+          sed -i 's/Settings.ACTION_NOTIFICATION_SETTINGS/Settings.ACTION_SETTINGS/g' \
+            app/src/main/java/com/codetech/sticode/MainActivity.java
           grep -q "applicationId 'com.codetech.sticode.mega'" app/build.gradle
           grep -q "versionName '5.0.0'" app/build.gradle
           grep -q 'ESTIMATED_PHRASE_VARIATIONS = 12_441_600_000L' app/src/main/java/com/codetech/sticode/MegaCommandRouter.java
           grep -q 'Notification.Action.Builder(0, "Stop"' app/src/main/java/com/codetech/sticode/DailyAudioService.java
+          ! grep -q 'ACTION_NOTIFICATION_SETTINGS' app/src/main/java/com/codetech/sticode/MainActivity.java
           cd /tmp/source
           zip -qr /tmp/Stevo-Mega-Android-v5.0.0-Source.zip Stevo-Mega-Android-v5.0.0
 
