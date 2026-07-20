@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Assemble repository patch representation
+      - name: Assemble repository patch and correction representations
         run: |
           set -euo pipefail
           cat \
@@ -20,13 +20,31 @@ jobs:
             v5/patch/patch.gz.hex.02 \
             v5/patch/patch.gz.hex.03 \
             > /tmp/remote-stevo-v5.patch.gz.hex
-          wc -c /tmp/remote-stevo-v5.patch.gz.hex > /tmp/remote-length.txt
-          sha256sum /tmp/remote-stevo-v5.patch.gz.hex > /tmp/remote-sha256.txt
+          cat \
+            v5/correction/correction.zst.hex.00 \
+            v5/correction/correction.zst.hex.01a \
+            v5/correction/correction.zst.hex.01b \
+            v5/correction/correction.zst.hex.01c \
+            v5/correction/correction.zst.hex.01d \
+            > /tmp/remote-stevo-v5-correction.zst.hex
+          wc -c /tmp/remote-stevo-v5.patch.gz.hex > /tmp/remote-patch-length.txt
+          sha256sum /tmp/remote-stevo-v5.patch.gz.hex > /tmp/remote-patch-sha256.txt
+          wc -c /tmp/remote-stevo-v5-correction.zst.hex > /tmp/remote-correction-length.txt
+          sha256sum /tmp/remote-stevo-v5-correction.zst.hex > /tmp/remote-correction-sha256.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          h=''.join(Path('/tmp/remote-stevo-v5-correction.zst.hex').read_text().split())
+          Path('/tmp/remote-stevo-v5-correction.zst').write_bytes(bytes.fromhex(h))
+          PY
+          sha256sum /tmp/remote-stevo-v5-correction.zst > /tmp/remote-correction-binary-sha256.txt
+          zstd --decompress --patch-from=/tmp/remote-stevo-v5.patch.gz.hex \
+            /tmp/remote-stevo-v5-correction.zst --output=/tmp/reconstructed-stevo-v5.patch.gz.hex --force || true
+          if [ -f /tmp/reconstructed-stevo-v5.patch.gz.hex ]; then
+            wc -c /tmp/reconstructed-stevo-v5.patch.gz.hex > /tmp/reconstructed-length.txt
+            sha256sum /tmp/reconstructed-stevo-v5.patch.gz.hex > /tmp/reconstructed-sha256.txt
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: stevo-v5-patch-inspection
-          path: |
-            /tmp/remote-stevo-v5.patch.gz.hex
-            /tmp/remote-length.txt
-            /tmp/remote-sha256.txt
+          path: /tmp/*stevo-v5* /tmp/remote-*.txt /tmp/reconstructed-*.txt
           if-no-files-found: error
