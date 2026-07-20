@@ -1,0 +1,23 @@
+name: Inspect Stevo v4 Patch
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble remote patch
+        run: |
+          mkdir -p /tmp/inspect
+          cat v4-final/patch.gz.b64.* > /tmp/inspect/remote-patch.gz.b64
+          sha256sum /tmp/inspect/remote-patch.gz.b64 > /tmp/inspect/remote-sha256.txt
+          wc -c /tmp/inspect/remote-patch.gz.b64 > /tmp/inspect/remote-size.txt
+          for f in v4-final/patch.gz.b64.*; do wc -c "$f"; sha256sum "$f"; done > /tmp/inspect/chunk-details.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stevo-v4-remote-patch-inspection
+          path: /tmp/inspect

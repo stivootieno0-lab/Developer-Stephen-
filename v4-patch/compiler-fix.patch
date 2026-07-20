@@ -1,0 +1,72 @@
+--- a/app/src/main/java/com/codetech/sticode/StiCodeAccessibilityService.java
++++ b/app/src/main/java/com/codetech/sticode/StiCodeAccessibilityService.java
+@@ -1,14 +1,17 @@
+ package com.codetech.sticode;
+ 
+ import android.accessibilityservice.AccessibilityService;
++import android.accessibilityservice.GestureDescription;
+ import android.content.ClipData;
+ import android.content.ClipboardManager;
+ import android.content.Context;
+ import android.content.Intent;
++import android.graphics.Path;
+ import android.os.Build;
+ import android.os.Bundle;
+ import android.os.Handler;
+ import android.os.Looper;
++import android.util.DisplayMetrics;
+ import android.view.accessibility.AccessibilityEvent;
+ import android.view.accessibility.AccessibilityNodeInfo;
+ 
+@@ -141,20 +144,17 @@
+     }
+ 
+     private boolean scrollHorizontal(boolean right) {
+-        AccessibilityNodeInfo root = getRootInActiveWindow();
+-        if (root == null) return false;
+-        Deque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
+-        queue.add(root);
+-        int action = right ? AccessibilityNodeInfo.ACTION_SCROLL_RIGHT : AccessibilityNodeInfo.ACTION_SCROLL_LEFT;
+-        while (!queue.isEmpty()) {
+-            AccessibilityNodeInfo node = queue.removeFirst();
+-            if (node.isScrollable() && node.performAction(action)) return true;
+-            for (int i = 0; i < node.getChildCount(); i++) {
+-                AccessibilityNodeInfo child = node.getChild(i);
+-                if (child != null) queue.addLast(child);
+-            }
+-        }
+-        return false;
++        DisplayMetrics metrics = getResources().getDisplayMetrics();
++        float y = metrics.heightPixels * 0.50f;
++        float startX = right ? metrics.widthPixels * 0.78f : metrics.widthPixels * 0.22f;
++        float endX = right ? metrics.widthPixels * 0.22f : metrics.widthPixels * 0.78f;
++        Path path = new Path();
++        path.moveTo(startX, y);
++        path.lineTo(endX, y);
++        GestureDescription gesture = new GestureDescription.Builder()
++                .addStroke(new GestureDescription.StrokeDescription(path, 0, 420))
++                .build();
++        return dispatchGesture(gesture, null, null);
+     }
+ 
+     private boolean scrollRepeated(boolean down) {
+--- a/app/src/main/java/com/codetech/sticode/CommandProcessor.java
++++ b/app/src/main/java/com/codetech/sticode/CommandProcessor.java
+@@ -224,7 +224,7 @@
+ 
+         if (matchesAny(lower, "open qr scanner", "scan qr code", "scan barcode")) return openCamera();
+         if (matchesAny(lower, "device information", "phone information", "about phone")) return openSettings(Settings.ACTION_DEVICE_INFO_SETTINGS, "Device information opened.");
+-        if (matchesAny(lower, "system update", "software update", "check for updates")) return openSettings(Settings.ACTION_SYSTEM_UPDATE_SETTINGS, "System update settings opened.");
++        if (matchesAny(lower, "system update", "software update", "check for updates")) return openSettings("android.settings.SYSTEM_UPDATE_SETTINGS", "System update settings opened.");
+         return null;
+     }
+ 
+@@ -240,7 +240,7 @@
+         else if (containsAny(lower, "default apps settings", "default applications settings")) { action = Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS; message = "Default-app settings opened."; }
+         else if (containsAny(lower, "notification access settings", "notification listener settings")) { action = Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS; message = "Notification-access settings opened."; }
+         else if (containsAny(lower, "do not disturb settings", "dnd settings")) { action = Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS; message = "Do Not Disturb access settings opened."; }
+-        else if (containsAny(lower, "picture in picture settings", "pip settings")) { action = Settings.ACTION_PICTURE_IN_PICTURE_SETTINGS; message = "Picture-in-picture settings opened."; }
++        else if (containsAny(lower, "picture in picture settings", "pip settings")) { action = "android.settings.PICTURE_IN_PICTURE_SETTINGS"; message = "Picture-in-picture settings opened."; }
+         else if (containsAny(lower, "unknown apps settings", "unknown sources settings")) { action = Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES; message = "Unknown-app installation settings opened."; }
+         else if (containsAny(lower, "usage access settings")) { action = Settings.ACTION_USAGE_ACCESS_SETTINGS; message = "Usage-access settings opened."; }
+         else if (containsAny(lower, "data usage settings")) { action = Settings.ACTION_DATA_USAGE_SETTINGS; message = "Data-usage settings opened."; }

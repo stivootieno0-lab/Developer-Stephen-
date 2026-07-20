@@ -1,0 +1,174 @@
+name: Build Stevo Mega v5
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Reconstruct verified Stevo Mega v5 source
+        run: |
+          set -euo pipefail
+          cat chunks/source.*.b64 | base64 --decode > /tmp/sticode-v3.zip
+          unzip -t /tmp/sticode-v3.zip
+          mkdir -p /tmp/source
+          unzip -q /tmp/sticode-v3.zip -d /tmp/source
+
+          cat v5-xz/patch.xz.b64.* > /tmp/stevo-v5.patch.xz.b64
+          echo '994d68e31fa88101250ab57b870471f5225acd7f7655874499a4675adb419a00  /tmp/stevo-v5.patch.xz.b64' | sha256sum --check
+          base64 --decode /tmp/stevo-v5.patch.xz.b64 > /tmp/stevo-v5.patch.xz
+          echo '0b9d3886670132594953fd3d726e5e12a33776ed5f3dc6f291370386ab0adb58  /tmp/stevo-v5.patch.xz' | sha256sum --check
+          xz --decompress --stdout /tmp/stevo-v5.patch.xz > /tmp/stevo-v5.patch
+          echo '023f5b77334f2929a91dfb90bac2631c7349050157b622ae782c9d97e0ee07f3  /tmp/stevo-v5.patch' | sha256sum --check
+
+          cd /tmp/source/StiCode-Android-v3.0.0
+          patch -p1 < /tmp/stevo-v5.patch
+          grep -q "applicationId 'com.codetech.sticode.mega'" app/build.gradle
+          grep -q "versionCode 200" app/build.gradle
+          grep -q "versionName '5.0.0'" app/build.gradle
+          grep -q 'ESTIMATED_PHRASE_VARIATIONS = 12_960_000_000L' app/src/main/java/com/codetech/sticode/MegaCommandRouter.java
+          test -f app/src/main/java/com/codetech/sticode/SafePaymentAssistant.java
+          test -f app/src/main/java/com/codetech/sticode/DeviceHealthReporter.java
+          test -f app/src/main/java/com/codetech/sticode/ConversationEngine.java
+          test -f app/src/main/java/com/codetech/sticode/ReminderScheduler.java
+          test -f app/src/main/java/com/codetech/sticode/MoneyNotificationService.java
+          test -f app/src/main/java/com/codetech/sticode/DailyAudioService.java
+
+          cd /tmp/source
+          mv StiCode-Android-v3.0.0 Stevo-Mega-Android-v5.0.0
+          zip -qr /tmp/Stevo-Mega-Android-v5.0.0-Source.zip Stevo-Mega-Android-v5.0.0
+
+      - name: Build Android release
+        working-directory: /tmp/source/Stevo-Mega-Android-v5.0.0
+        run: |
+          set -o pipefail
+          gradle assembleRelease --stacktrace 2>&1 | tee /tmp/stevo-v5-build.log
+
+      - name: Download original v4 update certificate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/v4-key
+          curl --fail --location --retry 3 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/8448432173/zip" \
+            --output /tmp/v4-key.zip
+          unzip -q /tmp/v4-key.zip -d /tmp/v4-key
+          test -n "$(find /tmp/v4-key -name 'stevo-mega-release.jks' -print -quit)"
+          test -n "$(find /tmp/v4-key -name 'KEEP-PRIVATE.txt' -print -quit)"
+
+      - name: Sign and validate update release
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/release
+          KEYSTORE=$(find /tmp/v4-key -name 'stevo-mega-release.jks' -print -quit)
+          PRIVATE_NOTE=$(find /tmp/v4-key -name 'KEEP-PRIVATE.txt' -print -quit)
+          PASS=$(awk -F': ' '/Store password/{print $2; exit}' "$PRIVATE_NOTE" | tr -d '\r')
+          test -n "$PASS"
+
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          UNSIGNED=/tmp/source/Stevo-Mega-Android-v5.0.0/app/build/outputs/apk/release/app-release-unsigned.apk
+          test -f "$UNSIGNED"
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED" /tmp/release/Stevo-Mega-v5.0.0-aligned.apk
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$KEYSTORE" \
+            --ks-pass "pass:$PASS" \
+            --key-pass "pass:$PASS" \
+            --ks-key-alias stevomega \
+            --out /tmp/release/Stevo-Mega-v5.0.0.apk \
+            /tmp/release/Stevo-Mega-v5.0.0-aligned.apk
+          rm /tmp/release/Stevo-Mega-v5.0.0-aligned.apk
+
+          "$BUILD_TOOLS/zipalign" -c -p 4 /tmp/release/Stevo-Mega-v5.0.0.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs /tmp/release/Stevo-Mega-v5.0.0.apk > /tmp/release/APK-SIGNATURE.txt
+          "$BUILD_TOOLS/aapt2" dump badging /tmp/release/Stevo-Mega-v5.0.0.apk > /tmp/release/APK-BADGING.txt
+          unzip -t /tmp/release/Stevo-Mega-v5.0.0.apk > /tmp/release/APK-ZIP-TEST.txt
+          sha256sum /tmp/release/Stevo-Mega-v5.0.0.apk > /tmp/release/Stevo-Mega-v5.0.0.sha256
+
+          V4_APK=$(find /tmp/v4-key -name 'Stevo-Mega-v4.0.0.apk' -print -quit)
+          test -n "$V4_APK"
+          "$BUILD_TOOLS/apksigner" verify --print-certs "$V4_APK" > /tmp/v4-cert.txt
+          V4_DIGEST=$(awk -F': ' '/certificate SHA-256 digest/{print $2; exit}' /tmp/v4-cert.txt)
+          V5_DIGEST=$(awk -F': ' '/certificate SHA-256 digest/{print $2; exit}' /tmp/release/APK-SIGNATURE.txt)
+          test -n "$V4_DIGEST"
+          test "$V4_DIGEST" = "$V5_DIGEST"
+          printf 'V4 signer SHA-256: %s\nV5 signer SHA-256: %s\nSigner match: PASS\n' "$V4_DIGEST" "$V5_DIGEST" > /tmp/release/UPDATE-SIGNER-CHECK.txt
+
+          cp /tmp/Stevo-Mega-Android-v5.0.0-Source.zip /tmp/release/
+          cp /tmp/stevo-v5-build.log /tmp/release/COMPILER-LOG.txt
+          cat > /tmp/release/COMMAND-GUIDE.txt <<'TXT'
+          STEVO MEGA v5.0.0 — COMMAND GUIDE
+
+          Examples:
+          - Hey Stevo, send money 50 to 0728675514.
+          - Confirm payment. (Stevo opens the official payment app and fills safe non-secret fields only.)
+          - Pay bill 1000 to 123456 account ABC123.
+          - Lipa na M-PESA 250 to till 123456.
+          - Buy airtime 100 for 0728675514.
+          - Okoa Jahazi.
+          - Check phone health / run system check.
+          - Close all apps / minimize app / open home screen.
+          - Send WhatsApp message to Mam saying I will call you tonight.
+          - Remind me to pray four times daily.
+          - Remind me to call Mam every day.
+          - Enable tithe and savings reminders.
+          - Play one gallery audio daily.
+          - Check official app updates / check official phone update.
+          - Encourage me / tell me a joke / find a Bible verse about hope.
+
+          Security boundaries:
+          - Stevo never reads, stores, enters, or transmits a PIN, OTP, password, or biometric credential.
+          - Final Send/Pay confirmation remains manual in the official payment app.
+          - Locked apps are not bypassed; authenticate using the app's approved method.
+          - Contact deletion and app uninstallation require visible Android confirmation.
+          - Media search is for lawful, authorized sources only.
+          - Phone and app updates use official Android, manufacturer, or Play Store channels only.
+          TXT
+          cat > /tmp/release/RELEASE-VALIDATION.txt <<'TXT'
+          Stevo Mega v5.0.0 release checks:
+          - v5 patch base64 SHA-256 verified
+          - v5 XZ archive SHA-256 verified
+          - uncompressed source patch SHA-256 verified
+          - Android release compilation passed
+          - APK zip alignment passed
+          - APK signature verification passed
+          - v4 and v5 signing certificate match passed
+          - APK archive integrity test passed
+          - package: com.codetech.sticode.mega
+          - version: 5.0.0 (versionCode 200)
+          - estimated compositional language variations: 12,960,000,000
+          TXT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stevo-mega-v5-release
+          path: /tmp/release
+          if-no-files-found: error
+
+      - name: Upload compiler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stevo-mega-v5-compiler-log
+          path: /tmp/stevo-v5-build.log
+          if-no-files-found: ignore

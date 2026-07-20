@@ -1,0 +1,93 @@
+name: Build Stevo Mega v4
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Reconstruct and patch source
+        run: |
+          set -euo pipefail
+          cat chunks/source.*.b64 | base64 --decode > /tmp/sticode-v3.zip
+          unzip -t /tmp/sticode-v3.zip
+          mkdir -p /tmp/source
+          unzip -q /tmp/sticode-v3.zip -d /tmp/source
+          cat v4-patch/patch.gz.b64.* | base64 --decode | gzip --decompress > /tmp/stevo-v4.patch
+          cd /tmp/source/StiCode-Android-v3.0.0
+          patch -p1 < /tmp/stevo-v4.patch
+          grep -q "applicationId 'com.codetech.sticode.mega'" app/build.gradle
+          grep -q "versionName '4.0.0'" app/build.gradle
+          grep -q 'ESTIMATED_PHRASE_VARIATIONS = 8_640_000L' app/src/main/java/com/codetech/sticode/MegaCommandRouter.java
+          cd /tmp/source
+          mv StiCode-Android-v3.0.0 Stevo-Mega-Android-v4.0.0
+          zip -qr /tmp/Stevo-Mega-Android-v4.0.0-Source.zip Stevo-Mega-Android-v4.0.0
+
+      - name: Build Android release
+        working-directory: /tmp/source/Stevo-Mega-Android-v4.0.0
+        run: |
+          set -o pipefail
+          gradle assembleRelease --stacktrace 2>&1 | tee /tmp/stevo-v4-build.log
+
+      - name: Sign and validate
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/release
+          keytool -genkeypair -v \
+            -keystore /tmp/release/stevo-mega-release.jks \
+            -storepass StevoMega2026 \
+            -keypass StevoMega2026 \
+            -alias stevomega \
+            -keyalg RSA -keysize 4096 -validity 10000 \
+            -dname "CN=Stevo Mega, OU=CodeTech Software Solutions, O=CodeTech Software Solutions, L=Nairobi, ST=Nairobi, C=KE"
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          UNSIGNED=/tmp/source/Stevo-Mega-Android-v4.0.0/app/build/outputs/apk/release/app-release-unsigned.apk
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED" /tmp/release/Stevo-Mega-v4.0.0-aligned.apk
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks /tmp/release/stevo-mega-release.jks \
+            --ks-pass pass:StevoMega2026 \
+            --key-pass pass:StevoMega2026 \
+            --ks-key-alias stevomega \
+            --out /tmp/release/Stevo-Mega-v4.0.0.apk \
+            /tmp/release/Stevo-Mega-v4.0.0-aligned.apk
+          "$BUILD_TOOLS/zipalign" -c -p 4 /tmp/release/Stevo-Mega-v4.0.0.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs /tmp/release/Stevo-Mega-v4.0.0.apk > /tmp/release/APK-SIGNATURE.txt
+          "$BUILD_TOOLS/aapt2" dump badging /tmp/release/Stevo-Mega-v4.0.0.apk > /tmp/release/APK-BADGING.txt
+          unzip -t /tmp/release/Stevo-Mega-v4.0.0.apk > /tmp/release/APK-ZIP-TEST.txt
+          sha256sum /tmp/release/Stevo-Mega-v4.0.0.apk > /tmp/release/Stevo-Mega-v4.0.0.sha256
+          cp /tmp/Stevo-Mega-Android-v4.0.0-Source.zip /tmp/release/
+          cp /tmp/stevo-v4-build.log /tmp/release/COMPILER-LOG.txt
+          cat > /tmp/release/KEEP-PRIVATE.txt <<'TXT'
+          Keep stevo-mega-release.jks private. Future updates for com.codetech.sticode.mega must use this signing key.
+          Alias: stevomega
+          Store password: StevoMega2026
+          Key password: StevoMega2026
+          TXT
+
+      - name: Upload release
+        uses: actions/upload-artifact@v4
+        with:
+          name: stevo-mega-v4-release
+          path: /tmp/release
+          if-no-files-found: error
+
+      - name: Upload compiler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stevo-mega-v4-compiler-log
+          path: /tmp/stevo-v4-build.log
+          if-no-files-found: ignore

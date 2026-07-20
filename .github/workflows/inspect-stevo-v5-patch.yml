@@ -1,0 +1,29 @@
+name: Inspect Stevo v5 Patch
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package exact repository chunks
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/inspection/chunks
+          cp v5-xz/patch.xz.b64.* /tmp/inspection/chunks/
+          sha256sum v5-xz/patch.xz.b64.* > /tmp/inspection/CHUNK-SHA256.txt
+          wc -c v5-xz/patch.xz.b64.* > /tmp/inspection/CHUNK-SIZES.txt
+          cat v5-xz/patch.xz.b64.* > /tmp/inspection/remote-patch.xz.b64
+          sha256sum /tmp/inspection/remote-patch.xz.b64 > /tmp/inspection/COMBINED-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stevo-v5-patch-inspection
+          path: /tmp/inspection
+          if-no-files-found: error

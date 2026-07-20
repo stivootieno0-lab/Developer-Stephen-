@@ -1,0 +1,23 @@
+name: Inspect Stevo v4 Correction
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble correction
+        run: |
+          mkdir -p /tmp/inspect-correction
+          cat v4-correction/correction.b64.* > /tmp/inspect-correction/remote-correction.b64
+          sha256sum /tmp/inspect-correction/remote-correction.b64 > /tmp/inspect-correction/sha256.txt
+          wc -c /tmp/inspect-correction/remote-correction.b64 > /tmp/inspect-correction/size.txt
+          for f in v4-correction/correction.b64.*; do wc -c "$f"; sha256sum "$f"; done > /tmp/inspect-correction/chunks.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stevo-v4-correction-inspection
+          path: /tmp/inspect-correction
