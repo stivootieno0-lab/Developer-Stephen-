@@ -1,0 +1,132 @@
+name: Build Stevo Mega v5
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Retrieve verified v4 source and signing identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/8448432173/zip" \
+            --output /tmp/v4-release.zip
+          mkdir -p /tmp/v4-release
+          unzip -q /tmp/v4-release.zip -d /tmp/v4-release
+          SOURCE_ZIP=$(find /tmp/v4-release -name 'Stevo-Mega-Android-v4.0.0-Source.zip' -type f | head -1)
+          KEYSTORE=$(find /tmp/v4-release -name 'stevo-mega-release.jks' -type f | head -1)
+          PRIVATE_INFO=$(find /tmp/v4-release -name 'KEEP-PRIVATE.txt' -type f | head -1)
+          test -n "$SOURCE_ZIP" && test -n "$KEYSTORE" && test -n "$PRIVATE_INFO"
+          mkdir -p /tmp/source
+          unzip -q "$SOURCE_ZIP" -d /tmp/source
+          V4DIR=$(find /tmp/source -mindepth 1 -maxdepth 1 -type d | head -1)
+          test -f "$V4DIR/settings.gradle"
+          mv "$V4DIR" /tmp/source/Stevo-Mega-Android-v5.0.0
+          PASS=$(awk -F': ' '/Store password:/ {print $2; exit}' "$PRIVATE_INFO")
+          test -n "$PASS"
+          cp "$KEYSTORE" /tmp/stevo-mega-release.jks
+          printf '%s' "$PASS" > /tmp/stevo-signing-password
+          chmod 600 /tmp/stevo-mega-release.jks /tmp/stevo-signing-password
+
+      - name: Reconstruct and verify v5 patch
+        run: |
+          set -euo pipefail
+          cat \
+            v5/patch/patch.gz.hex.00 \
+            v5/patch/patch.gz.hex.01 \
+            v5/patch/patch.gz.hex.015 \
+            v5/patch/patch.gz.hex.02 \
+            v5/patch/patch.gz.hex.03 \
+            > /tmp/stevo-v5.patch.gz.hex
+          echo '947a605407141c589cca94d31a395cc033bebfd662dd46fb4edfe65cf71a347f  /tmp/stevo-v5.patch.gz.hex' | sha256sum --check
+          python3 - <<'PY'
+          from pathlib import Path
+          h = ''.join(Path('/tmp/stevo-v5.patch.gz.hex').read_text().split())
+          Path('/tmp/stevo-v5.patch.gz').write_bytes(bytes.fromhex(h))
+          PY
+          echo 'c9e1bcaee1eef3baea86dbfccac0ff8214a48b27e116ccfa9dccc7fbdd5dc99b  /tmp/stevo-v5.patch.gz' | sha256sum --check
+          gzip --decompress --stdout /tmp/stevo-v5.patch.gz > /tmp/stevo-v5.patch
+          echo '7dfb565b84bea1cd04528054d8142c838682618a247f6f49c623319e2fd7eea5  /tmp/stevo-v5.patch' | sha256sum --check
+          cd /tmp/source/Stevo-Mega-Android-v5.0.0
+          patch -p1 < /tmp/stevo-v5.patch
+          grep -q "applicationId 'com.codetech.sticode.mega'" app/build.gradle
+          grep -q "versionName '5.0.0'" app/build.gradle
+          grep -q 'ESTIMATED_PHRASE_VARIATIONS = 12_441_600_000L' app/src/main/java/com/codetech/sticode/MegaCommandRouter.java
+          grep -q 'Notification.Action.Builder(0, "Stop"' app/src/main/java/com/codetech/sticode/DailyAudioService.java
+          cd /tmp/source
+          zip -qr /tmp/Stevo-Mega-Android-v5.0.0-Source.zip Stevo-Mega-Android-v5.0.0
+
+      - name: Build Android release
+        working-directory: /tmp/source/Stevo-Mega-Android-v5.0.0
+        run: |
+          set -o pipefail
+          gradle assembleRelease --stacktrace 2>&1 | tee /tmp/stevo-v5-build.log
+
+      - name: Sign and validate release
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/release
+          PASS=$(cat /tmp/stevo-signing-password)
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          UNSIGNED=/tmp/source/Stevo-Mega-Android-v5.0.0/app/build/outputs/apk/release/app-release-unsigned.apk
+          test -f "$UNSIGNED"
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED" /tmp/release/Stevo-Mega-v5.0.0-aligned.apk
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks /tmp/stevo-mega-release.jks \
+            --ks-pass "pass:$PASS" \
+            --key-pass "pass:$PASS" \
+            --ks-key-alias stevomega \
+            --out /tmp/release/Stevo-Mega-v5.0.0.apk \
+            /tmp/release/Stevo-Mega-v5.0.0-aligned.apk
+          rm -f /tmp/release/Stevo-Mega-v5.0.0-aligned.apk
+          "$BUILD_TOOLS/zipalign" -c -p 4 /tmp/release/Stevo-Mega-v5.0.0.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs /tmp/release/Stevo-Mega-v5.0.0.apk > /tmp/release/APK-SIGNATURE.txt
+          "$BUILD_TOOLS/aapt2" dump badging /tmp/release/Stevo-Mega-v5.0.0.apk > /tmp/release/APK-BADGING.txt
+          unzip -t /tmp/release/Stevo-Mega-v5.0.0.apk > /tmp/release/APK-ZIP-TEST.txt
+          sha256sum /tmp/release/Stevo-Mega-v5.0.0.apk > /tmp/release/Stevo-Mega-v5.0.0.sha256
+          cp /tmp/Stevo-Mega-Android-v5.0.0-Source.zip /tmp/release/
+          cp /tmp/stevo-v5-build.log /tmp/release/COMPILER-LOG.txt
+          cat > /tmp/release/VALIDATION.txt <<'TXT'
+          Stevo Mega v5.0.0 validation completed by GitHub Actions.
+          Checks passed: patch SHA-256, Android release compilation, ZIP alignment, APK signature verification, package inspection, APK archive integrity and final SHA-256.
+          The package retains com.codetech.sticode.mega and the v4 signing identity for in-place upgrades.
+          Financial preparation never reads, stores or enters an M-PESA PIN and stops before final payment confirmation.
+          TXT
+
+      - name: Upload release
+        uses: actions/upload-artifact@v4
+        with:
+          name: stevo-mega-v5-release
+          path: /tmp/release
+          if-no-files-found: error
+
+      - name: Upload compiler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stevo-mega-v5-compiler-log
+          path: /tmp/stevo-v5-build.log
+          if-no-files-found: ignore
