@@ -1,0 +1,32 @@
+name: Inspect Stevo v5 Patch
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble repository patch representation
+        run: |
+          set -euo pipefail
+          cat \
+            v5/patch/patch.gz.hex.00 \
+            v5/patch/patch.gz.hex.01 \
+            v5/patch/patch.gz.hex.015 \
+            v5/patch/patch.gz.hex.02 \
+            v5/patch/patch.gz.hex.03 \
+            > /tmp/remote-stevo-v5.patch.gz.hex
+          wc -c /tmp/remote-stevo-v5.patch.gz.hex > /tmp/remote-length.txt
+          sha256sum /tmp/remote-stevo-v5.patch.gz.hex > /tmp/remote-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stevo-v5-patch-inspection
+          path: |
+            /tmp/remote-stevo-v5.patch.gz.hex
+            /tmp/remote-length.txt
+            /tmp/remote-sha256.txt
+          if-no-files-found: error
