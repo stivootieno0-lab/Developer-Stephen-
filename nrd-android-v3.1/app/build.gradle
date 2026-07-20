@@ -1,0 +1,25 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'org.nationalrevivaldesk.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'org.nationalrevivaldesk.app'
+        minSdk 24
+        targetSdk 35
+        versionCode 31000
+        versionName '3.1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
