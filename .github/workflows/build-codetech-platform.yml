@@ -1,8 +1,6 @@
 name: Build CodeTech Platform
 
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -11,113 +9,5 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
     steps:
-      - name: Check out build request
-        uses: actions/checkout@v4
-
-      - name: Set up PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          extensions: mbstring, xml, ctype, json, bcmath, fileinfo, pdo_sqlite, sqlite3
-          tools: composer:v2
-          coverage: none
-
-      - name: Reconstruct and verify CodeTech overlay
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p work
-          cat .build/parts/part.* | base64 -d > work/codetech-build-overlay.tar.xz
-          echo "d13202454dc90a451a130cb571fb02447cd132cabcb8524992aa291017e89b4c  work/codetech-build-overlay.tar.xz" | sha256sum -c -
-          tar -xJf work/codetech-build-overlay.tar.xz -C work
-          test -f work/codetech_overlay/bootstrap/app.php
-          test -f work/codetech_overlay/routes/web.php
-
-      - name: Create Laravel 12 application
-        run: composer create-project laravel/laravel:^12.0 work/app --no-interaction --prefer-dist
-
-      - name: Apply CodeTech application overlay
-        shell: bash
-        run: |
-          set -euo pipefail
-          rsync -a work/codetech_overlay/ work/app/
-          mkdir -p work/app/database/seeders/files
-          mkdir -p work/app/storage/app/private/apps/seed
-          mkdir -p work/app/storage/app/private/cvs
-          sed -i 's/->assertOk()->assertSee($app->name)->assertSee($app->checksum);/->assertOk()->assertSee($app->name);/' work/app/tests/Feature/PlatformTest.php
-
-      - name: Configure test environment
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd work/app
-          cp .env.example .env
-          touch database/database.sqlite
-          sed -i '/^DB_CONNECTION=/d;/^DB_HOST=/d;/^DB_PORT=/d;/^DB_DATABASE=/d;/^DB_USERNAME=/d;/^DB_PASSWORD=/d;/^CACHE_STORE=/d;/^SESSION_DRIVER=/d;/^QUEUE_CONNECTION=/d' .env
-          {
-            echo 'DB_CONNECTION=sqlite'
-            echo "DB_DATABASE=${GITHUB_WORKSPACE}/work/app/database/database.sqlite"
-            echo 'CACHE_STORE=array'
-            echo 'SESSION_DRIVER=array'
-            echo 'QUEUE_CONNECTION=sync'
-            echo 'MAIL_MAILER=log'
-            echo 'APP_URL=http://localhost'
-          } >> .env
-          php artisan key:generate --force
-
-      - name: Validate Composer package
-        working-directory: work/app
-        run: composer validate --no-check-publish
-
-      - name: Run migrations and seeders
-        working-directory: work/app
-        run: php artisan migrate:fresh --seed --force -vvv
-
-      - name: Validate registered routes
-        working-directory: work/app
-        run: php artisan route:list
-
-      - name: Compile Blade views
-        working-directory: work/app
-        run: php artisan view:cache -vvv
-
-      - name: Test public portals
-        working-directory: work/app
-        run: php artisan test --filter=test_public_portals_load
-
-      - name: Test user registration portal
-        working-directory: work/app
-        run: php artisan test --filter=test_user_can_register_and_reach_portal
-
-      - name: Test administrator portal
-        working-directory: work/app
-        run: php artisan test --filter=test_admin_can_open_control_centre
-
-      - name: Test public application page
-        working-directory: work/app
-        run: php artisan test --filter=test_approved_application_page_is_public
-
-      - name: Prepare production application package
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd work/app
-          composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
-          rm -f .env database/database.sqlite
-          php artisan optimize:clear || true
-          rm -rf storage/framework/cache/data/* storage/framework/sessions/* storage/framework/views/* storage/logs/*
-          touch storage/logs/.gitkeep
-          cd ..
-          zip -qr ../codetech-laravel-built.zip app \
-            -x 'app/.git/*' 'app/node_modules/*' 'app/.env' 'app/database/database.sqlite'
-
-      - name: Upload production Laravel artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: codetech-laravel-built
-          path: codetech-laravel-built.zip
-          if-no-files-found: error
-          retention-days: 3
+      - run: echo "Temporary CodeTech build workflow disabled after successful artifact generation."
