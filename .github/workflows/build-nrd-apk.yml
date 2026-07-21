@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - nrd-apk-build-v3.1.0
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -43,61 +40,21 @@ jobs:
         working-directory: nrd-android-v3.1
         run: gradle --no-daemon --stacktrace :app:assembleRelease
 
-      - name: Sign, verify and describe APK
+      - name: Prepare unsigned release and Android signing tools
         working-directory: nrd-android-v3.1
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p release/signing
-          KS_PASS="$(openssl rand -hex 24)"
-          keytool -genkeypair -v \
-            -keystore release/signing/nrd-v3.1-release.jks \
-            -alias nrd-release \
-            -keyalg RSA -keysize 4096 -validity 10000 \
-            -storepass "$KS_PASS" -keypass "$KS_PASS" \
-            -dname "CN=National Revival Desk, OU=CodeTech Software Solutions, O=National Revival Desk, L=Nairobi, ST=Nairobi, C=KE"
-          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 \
-            app/build/outputs/apk/release/app-release-unsigned.apk \
-            release/NationalRevivalDesk-v3.1.0-aligned.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
-            --ks release/signing/nrd-v3.1-release.jks \
-            --ks-key-alias nrd-release \
-            --ks-pass "pass:$KS_PASS" \
-            --key-pass "pass:$KS_PASS" \
-            --v1-signing-enabled true \
-            --v2-signing-enabled true \
-            --v3-signing-enabled true \
-            --out release/NationalRevivalDesk-v3.1.0.apk \
-            release/NationalRevivalDesk-v3.1.0-aligned.apk
-          rm release/NationalRevivalDesk-v3.1.0-aligned.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
-            release/NationalRevivalDesk-v3.1.0.apk | tee release/APK_SIGNATURE_REPORT.txt
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging \
-            release/NationalRevivalDesk-v3.1.0.apk | tee release/APK_PACKAGE_REPORT.txt
-          sha256sum release/NationalRevivalDesk-v3.1.0.apk | tee release/NationalRevivalDesk-v3.1.0.apk.sha256
-          cat > release/signing/PRIVATE_SIGNING_INFO.txt <<EOF
-          NATIONAL REVIVAL DESK ANDROID SIGNING MATERIAL
-          Keystore file: nrd-v3.1-release.jks
-          Alias: nrd-release
-          Store password: $KS_PASS
-          Key password: $KS_PASS
-          Keep this file and keystore private. Future updates for package org.nationalrevivaldesk.app must use the same key.
-          EOF
-          cat > release/INSTALL_ANDROID.txt <<'EOF'
-          NATIONAL REVIVAL DESK 3.1.0
-          1. Copy NationalRevivalDesk-v3.1.0.apk to an Android 7.0 or newer device.
-          2. Open the APK in Files/My Files.
-          3. Permit installation from that source when Android asks.
-          4. Tap Install, then Open.
-          5. Allow notifications so radio and future reminders can be shown.
-          6. Sign in using an account created in the fresh National Revival Desk website.
-          The APK connects only to https://www.nationalrevivaldesk.com/.
-          EOF
+          mkdir -p release
+          cp app/build/outputs/apk/release/app-release-unsigned.apk release/NationalRevivalDesk-v3.2.0-unsigned.apk
+          cp -a "$ANDROID_HOME/build-tools/35.0.0" release/android-build-tools-35.0.0
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/NationalRevivalDesk-v3.2.0-unsigned.apk | tee release/APK_UNSIGNED_PACKAGE_REPORT.txt
+          sha256sum release/NationalRevivalDesk-v3.2.0-unsigned.apk | tee release/NationalRevivalDesk-v3.2.0-unsigned.apk.sha256
 
-      - name: Upload signed release
+      - name: Upload unsigned build and signing tools
         uses: actions/upload-artifact@v4
         with:
-          name: NationalRevivalDesk-v3.1.0-Signed-Release
+          name: NationalRevivalDesk-v3.2.0-Unsigned-With-Build-Tools
           path: nrd-android-v3.1/release/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
