@@ -49,15 +49,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          cp app/build/outputs/apk/release/app-release-unsigned.apk release/NationalRevivalDesk-v3.2.0-unsigned.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk release/NationalRevivalDesk-v3.3.0-unsigned.apk
           cp -a "$ANDROID_HOME/build-tools/35.0.0" release/android-build-tools-35.0.0
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/NationalRevivalDesk-v3.2.0-unsigned.apk | tee release/APK_UNSIGNED_PACKAGE_REPORT.txt
-          sha256sum release/NationalRevivalDesk-v3.2.0-unsigned.apk | tee release/NationalRevivalDesk-v3.2.0-unsigned.apk.sha256
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release/NationalRevivalDesk-v3.3.0-unsigned.apk | tee release/APK_UNSIGNED_PACKAGE_REPORT.txt
+          sha256sum release/NationalRevivalDesk-v3.3.0-unsigned.apk | tee release/NationalRevivalDesk-v3.3.0-unsigned.apk.sha256
 
       - name: Upload unsigned build and signing tools
         uses: actions/upload-artifact@v4
         with:
-          name: NationalRevivalDesk-v3.2.0-Unsigned-With-Build-Tools
+          name: NationalRevivalDesk-v3.3.0-Unsigned-With-Build-Tools
           path: nrd-android-v3.1/release/
           if-no-files-found: error
           retention-days: 7
