@@ -67,16 +67,25 @@ jobs:
           } >> .env
           php artisan key:generate --force
 
-      - name: Validate Laravel application
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd work/app
-          composer validate --no-check-publish
-          php artisan migrate:fresh --seed --force
-          php artisan route:list
-          php artisan view:cache
-          php artisan test
+      - name: Validate Composer package
+        working-directory: work/app
+        run: composer validate --no-check-publish
+
+      - name: Run migrations and seeders
+        working-directory: work/app
+        run: php artisan migrate:fresh --seed --force -vvv
+
+      - name: Validate registered routes
+        working-directory: work/app
+        run: php artisan route:list
+
+      - name: Compile Blade views
+        working-directory: work/app
+        run: php artisan view:cache -vvv
+
+      - name: Run automated tests
+        working-directory: work/app
+        run: php artisan test --testdox
 
       - name: Prepare production application package
         shell: bash
