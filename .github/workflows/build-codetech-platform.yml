@@ -1,0 +1,13 @@
+name: Build CodeTech Platform
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Temporary CodeTech build workflow disabled after successful artifact generation."
