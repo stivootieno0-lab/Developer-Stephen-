@@ -1,0 +1,13 @@
+name: Build CodeTech Portal APKs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Temporary CodeTech Android build workflow disabled after successful APK generation."
