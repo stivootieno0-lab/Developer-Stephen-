@@ -26,10 +26,12 @@ public final class MainActivity extends Activity {
     private ApiClient api;
     private LinearLayout root;
     private String radioStream = "https://s3.radio.co/s97f38db97/listen";
+    private String siteBase;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         api = new ApiClient(this);
+        siteBase = getString(R.string.backend_url).replaceAll("/+$", "");
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 5);
         if (api.token().isEmpty()) showLogin(); else showDashboard();
     }
@@ -43,6 +45,7 @@ public final class MainActivity extends Activity {
         scroll.addView(root);
         setContentView(scroll);
     }
+
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private TextView heading(String text) { TextView v=new TextView(this);v.setText(text);v.setTextSize(25);v.setTextColor(Color.rgb(5,47,131));v.setTypeface(null,1);v.setPadding(0,dp(12),0,dp(12));root.addView(v);return v; }
     private TextView paragraph(String text) { TextView v=new TextView(this);v.setText(text);v.setTextSize(16);v.setTextColor(Color.rgb(15,23,42));v.setPadding(0,dp(6),0,dp(14));root.addView(v);return v; }
@@ -51,6 +54,7 @@ public final class MainActivity extends Activity {
     private void toast(String message) { runOnUiThread(() -> Toast.makeText(this,message==null?"Operation failed":message,Toast.LENGTH_LONG).show()); }
     private interface Task { void run() throws Exception; }
     private void async(Task task) { new Thread(() -> { try { task.run(); } catch (Exception error) { toast(error.getMessage()); } }).start(); }
+    private void openWeb(String path) { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(siteBase + "/" + path.replaceFirst("^/+", "")))); }
 
     private void showLogin() {
         buildPage();
@@ -61,13 +65,14 @@ public final class MainActivity extends Activity {
         EditText password=input("Password");password.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
         Button login=button("Sign in");
         Button register=button("Register as Coordinator");
-        register.setOnClickListener(view -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.nationalrevivaldesk.com/signup/"))));
-        paragraph("Registration opens the professional four-step form for personal information, jurisdiction, church leadership, security and administrator approval.");
+        register.setOnClickListener(view -> openWeb("signup/"));
+        button("Open public website").setOnClickListener(view -> openWeb(""));
+        paragraph("Registration opens the professional multi-step form for personal information, jurisdiction, church leadership, security review and administrator approval.");
         login.setOnClickListener(view -> {
             String emailText=email.getText().toString().trim(),passwordText=password.getText().toString();
             if(emailText.isEmpty()||passwordText.isEmpty()){toast("Enter your email and password.");return;}
             login.setEnabled(false);
-            async(() -> { try { JSONObject result=api.post("api/mobile_login.php",new JSONObject().put("email",emailText).put("password",passwordText).put("device_name",Build.MANUFACTURER+" "+Build.MODEL).put("app_version","3.2.0"));api.saveToken(result.getString("token"));runOnUiThread(this::showDashboard);} finally {runOnUiThread(() -> login.setEnabled(true));} });
+            async(() -> { try { JSONObject result=api.post("api/mobile_login.php",new JSONObject().put("email",emailText).put("password",passwordText).put("device_name",Build.MANUFACTURER+" "+Build.MODEL).put("app_version","3.3.0"));api.saveToken(result.getString("token"));runOnUiThread(this::showDashboard);} finally {runOnUiThread(() -> login.setEnabled(true));} });
         });
     }
 
@@ -79,14 +84,15 @@ public final class MainActivity extends Activity {
         button("Notifications").setOnClickListener(view -> showList("Notifications","api/mobile_notifications.php","notifications"));
         button("Meetings").setOnClickListener(view -> showList("Meetings","api/mobile_meetings.php","meetings"));
         button("Support chat").setOnClickListener(view -> showSupport());
-        button("Open Coordinator Registration").setOnClickListener(view -> startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://www.nationalrevivaldesk.com/signup/"))));
+        button("Open Coordinator Registration").setOnClickListener(view -> openWeb("signup/"));
+        button("Open professional report portal").setOnClickListener(view -> openWeb("public_reports.php"));
         button("Play Jesus is LORD Radio").setOnClickListener(view -> { Intent i=new Intent(this,RadioService.class);i.setAction(RadioService.ACTION_PLAY);i.putExtra(RadioService.EXTRA_STREAM,radioStream);if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i); });
         button("Stop radio").setOnClickListener(view -> { Intent i=new Intent(this,RadioService.class);i.setAction(RadioService.ACTION_STOP);startService(i); });
         button("Log out").setOnClickListener(view -> {api.logout();showLogin();});
     }
 
     private void showSubmitReport() {
-        buildPage();heading("Submit Revival Report");paragraph("Your approved registration region is applied automatically by the server.");
+        buildPage();heading("Submit Revival Report");paragraph("Your approved registration jurisdiction is validated by the server.");
         EditText date=input("Event date YYYY-MM-DD");date.setText(new SimpleDateFormat("yyyy-MM-dd",Locale.US).format(new Date()));
         EditText reportTitle=input("Report title"),altar=input("Altar"),category=input("Category"),description=input("Detailed report");description.setMinLines(5);
         Button submit=button("Submit report");
