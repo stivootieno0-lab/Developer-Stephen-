@@ -33,7 +33,7 @@ jobs:
           cat .build/parts/part.* | base64 -d > work/codetech-build-overlay.tar.xz
           echo "d13202454dc90a451a130cb571fb02447cd132cabcb8524992aa291017e89b4c  work/codetech-build-overlay.tar.xz" | sha256sum -c -
           tar -xJf work/codetech-build-overlay.tar.xz -C work
-          test -f work/codetech_overlay/artisan
+          test -f work/codetech_overlay/bootstrap/app.php
           test -f work/codetech_overlay/routes/web.php
 
       - name: Create Laravel 12 application
