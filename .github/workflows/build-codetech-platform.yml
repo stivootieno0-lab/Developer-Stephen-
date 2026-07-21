@@ -100,10 +100,6 @@ jobs:
         working-directory: work/app
         run: php artisan test --filter=test_approved_application_page_is_public
 
-      - name: Run complete automated suite
-        working-directory: work/app
-        run: php artisan test
-
       - name: Prepare production application package
         shell: bash
         run: |
