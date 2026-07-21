@@ -84,9 +84,25 @@ jobs:
         working-directory: work/app
         run: php artisan view:cache -vvv
 
-      - name: Run automated tests
+      - name: Test public portals
         working-directory: work/app
-        run: php artisan test --testdox
+        run: php artisan test --filter=test_public_portals_load
+
+      - name: Test user registration portal
+        working-directory: work/app
+        run: php artisan test --filter=test_user_can_register_and_reach_portal
+
+      - name: Test administrator portal
+        working-directory: work/app
+        run: php artisan test --filter=test_admin_can_open_control_centre
+
+      - name: Test public application page
+        working-directory: work/app
+        run: php artisan test --filter=test_approved_application_page_is_public
+
+      - name: Run complete automated suite
+        working-directory: work/app
+        run: php artisan test
 
       - name: Prepare production application package
         shell: bash
