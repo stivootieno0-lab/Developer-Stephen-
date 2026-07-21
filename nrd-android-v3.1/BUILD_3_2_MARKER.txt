@@ -1,2 +1,2 @@
-National Revival Desk Android 3.2.0 registration build.
-Build trigger: 2026-07-21.
+National Revival Desk Android 3.3.0 production build for https://nationalrevivaldesk.online.
+Build marker: 2026-07-21-v3.3.0-final
