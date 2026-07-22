@@ -1,0 +1,57 @@
+name: National Revival Desk v4 Apple Build
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apple:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Create and test Apple projects
+        run: |
+          set -euo pipefail
+          flutter create --platforms=macos,ios --org com.nationalrevivaldesk --project-name national_revival_desk app
+          cp nrd_v4/simple/pubspec.yaml app/pubspec.yaml
+          rm -rf app/lib app/test
+          cp -a nrd_v4/simple/lib app/lib
+          cp -a nrd_v4/simple/test app/test
+          cd app
+          flutter pub get
+          flutter test
+      - name: Compile and package unsigned Apple outputs
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cd app
+          flutter build macos --release
+          flutter build ios --release --no-codesign
+          cd ..
+          APP=$(find app/build/macos/Build/Products/Release -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$APP"
+          hdiutil create -volname "National Revival Desk" -srcfolder "$APP" -ov -format UDZO release/NationalRevivalDesk-v4.0.0-macOS-unsigned.dmg
+          pkgbuild --component "$APP" --install-location /Applications release/NationalRevivalDesk-v4.0.0-macOS-unsigned.pkg
+          ditto -c -k --sequesterRsrc --keepParent app/build/ios/iphoneos/Runner.app release/NationalRevivalDesk-v4.0.0-iOS-unsigned-Runner.zip
+          cat > release/APPLE_BUILD_STATUS.txt <<'EOF'
+          macOS Flutter application compilation: PASSED
+          macOS DMG: CREATED, unsigned and not notarized
+          macOS PKG: CREATED, unsigned and not notarized
+          iOS Runner.app compilation with --no-codesign: PASSED
+          Normally installable signed IPA: NOT CREATED — Apple Developer certificate and provisioning profile required
+          Physical installation on an Apple device: NOT PERFORMED IN CI
+          EOF
+          shasum -a 256 release/* > release/checksums.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nrd-v4-apple-unsigned
+          path: release
+          if-no-files-found: error
