@@ -29,14 +29,37 @@ jobs:
           cp -a nrd_v4/simple/lib app/lib
           cp -a nrd_v4/simple/test app/test
       - name: Resolve packages
+        id: packages
+        continue-on-error: true
         working-directory: app
-        run: flutter pub get
+        run: flutter pub get 2>&1 | tee ../android-web-pub-get.log
       - name: Analyze source
+        id: analyze
+        if: steps.packages.outcome == 'success'
+        continue-on-error: true
         working-directory: app
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee ../android-web-analyze.log
       - name: Run tests
+        id: tests
+        if: steps.packages.outcome == 'success'
+        continue-on-error: true
         working-directory: app
-        run: flutter test
+        run: flutter test 2>&1 | tee ../android-web-test.log
+      - name: Upload release validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nrd-v4-android-web-validation-logs
+          path: |
+            android-web-pub-get.log
+            android-web-analyze.log
+            android-web-test.log
+          if-no-files-found: warn
+      - name: Enforce validation
+        run: |
+          test '${{ steps.packages.outcome }}' = 'success'
+          test '${{ steps.analyze.outcome }}' = 'success'
+          test '${{ steps.tests.outcome }}' = 'success'
       - name: Apply release branding
         run: |
           set -euo pipefail
