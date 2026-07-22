@@ -24,7 +24,11 @@ jobs:
         run: |
           set -o pipefail
           {
-            base64 -d nrd_v4/flutter_ci_src.tar.gz.b64 | tar -xz
+            cat nrd_v4/chunks/flutter-00.b64 nrd_v4/chunks/flutter-01.b64 nrd_v4/chunks/flutter-02.b64 nrd_v4/chunks/flutter-03.b64 > flutter-source.b64
+            echo "Encoded bytes: $(wc -c < flutter-source.b64)"
+            base64 -d flutter-source.b64 > flutter-source.tar.gz
+            gzip -t flutter-source.tar.gz
+            tar -xzf flutter-source.tar.gz
             flutter create --platforms=android,web,linux --org org.nationalrevivaldesk --project-name national_revival_desk app
             rsync -a flutter_ci_src/ app/
             python3 -c "p='app/lib/main.dart';s=open(p).read().replace('ColorScheme.fromSeed(seedColor:const Color(0xff053aa7),secondary:const Color(0xffd6b45f))','ColorScheme.fromSeed(seedColor:const Color(0xff053aa7))');open(p,'w').write(s)"
