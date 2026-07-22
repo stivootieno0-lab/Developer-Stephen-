@@ -20,19 +20,26 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Create application project
+      - name: Create validated application project
         run: |
-          flutter create --platforms=android,web --org com.nationalrevivaldesk --project-name app app
+          set -euo pipefail
+          flutter create --platforms=android,web --org com.nationalrevivaldesk --project-name national_revival_desk app
           cp nrd_v4/simple/pubspec.yaml app/pubspec.yaml
           rm -rf app/lib app/test
           cp -a nrd_v4/simple/lib app/lib
           cp -a nrd_v4/simple/test app/test
-      - name: Validate Flutter source
+          sed -i 's/com\.nationalrevivaldesk\.national_revival_desk/com.nationalrevivaldesk.app/g' app/android/app/build.gradle.kts
+          sed -i 's/android:label="national_revival_desk"/android:label="National Revival Desk"/' app/android/app/src/main/AndroidManifest.xml
+          sed -i 's/<title>national_revival_desk<\/title>/<title>National Revival Desk<\/title>/' app/web/index.html
+      - name: Resolve packages
         working-directory: app
-        run: |
-          flutter pub get
-          flutter analyze --no-fatal-infos --no-fatal-warnings
-          flutter test
+        run: flutter pub get
+      - name: Analyze source
+        working-directory: app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Run tests
+        working-directory: app
+        run: flutter test
       - name: Build Android and Web/PWA
         working-directory: app
         run: |
@@ -50,10 +57,10 @@ jobs:
           SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
           BUILD_TOOLS=$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
           cp app/build/app/outputs/flutter-apk/app-release.apk release/NationalRevivalDesk-v4.0.0-unsigned.apk
-          "$BUILD_TOOLS/zipalign" -f -p 4 release/NationalRevivalDesk-v4.0.0-unsigned.apk release/NationalRevivalDesk-v4.0.0.apk
-          "$BUILD_TOOLS/apksigner" sign --ks private-signing/NationalRevivalDesk-v4-release.jks --ks-key-alias national-revival-desk-v4 --ks-pass pass:"$PASS" --key-pass pass:"$PASS" --out release/NationalRevivalDesk-v4.0.0-signed.apk release/NationalRevivalDesk-v4.0.0.apk
-          mv release/NationalRevivalDesk-v4.0.0-signed.apk release/NationalRevivalDesk-v4.0.0.apk
+          "$BUILD_TOOLS/zipalign" -f -p 4 release/NationalRevivalDesk-v4.0.0-unsigned.apk release/NationalRevivalDesk-v4.0.0-aligned.apk
+          "$BUILD_TOOLS/apksigner" sign --ks private-signing/NationalRevivalDesk-v4-release.jks --ks-key-alias national-revival-desk-v4 --ks-pass pass:"$PASS" --key-pass pass:"$PASS" --out release/NationalRevivalDesk-v4.0.0.apk release/NationalRevivalDesk-v4.0.0-aligned.apk
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs release/NationalRevivalDesk-v4.0.0.apk > release/APK_SIGNATURE_REPORT.txt
+          "$BUILD_TOOLS/aapt" dump badging release/NationalRevivalDesk-v4.0.0.apk > release/APK_PACKAGE_REPORT.txt
           cp app/build/app/outputs/bundle/release/app-release.aab release/NationalRevivalDesk-v4.0.0.aab
           zip -d release/NationalRevivalDesk-v4.0.0.aab 'META-INF/*' >/dev/null 2>&1 || true
           jarsigner -keystore private-signing/NationalRevivalDesk-v4-release.jks -storepass "$PASS" -keypass "$PASS" -sigalg SHA256withRSA -digestalg SHA-256 release/NationalRevivalDesk-v4.0.0.aab national-revival-desk-v4
