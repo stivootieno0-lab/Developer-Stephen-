@@ -1,0 +1,284 @@
+name: National Revival Desk v4 Multi-Platform Build
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nrd-v4-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APP_NAME: NationalRevivalDesk
+  APP_VERSION: 4.0.0
+
+jobs:
+  android-web:
+    name: Android and Web/PWA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Reconstruct Flutter source
+        shell: bash
+        run: |
+          base64 -d nrd_v4/flutter_ci_src.tar.gz.b64 | tar -xz
+          flutter create --platforms=android,web --org org.nationalrevivaldesk --project-name national_revival_desk app
+          rsync -a flutter_ci_src/ app/
+          mkdir -p app/assets/images
+          printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZK8sAAAAASUVORK5CYII=' | base64 -d > app/assets/images/logo.png
+          mkdir -p app/android/app/src/main/kotlin/org/nationalrevivaldesk/app
+          old=$(find app/android/app/src/main/kotlin -name MainActivity.kt | head -1)
+          if [ -n "$old" ]; then sed 's/^package .*/package org.nationalrevivaldesk.app/' "$old" > app/android/app/src/main/kotlin/org/nationalrevivaldesk/app/MainActivity.kt; [ "$old" = "app/android/app/src/main/kotlin/org/nationalrevivaldesk/app/MainActivity.kt" ] || rm -f "$old"; fi
+          sed -i 's/org\.nationalrevivaldesk\.national_revival_desk/org.nationalrevivaldesk.app/g' app/android/app/build.gradle.kts app/android/app/build.gradle 2>/dev/null || true
+      - name: Resolve, analyze and test
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+      - name: Build Android development installers and Web/PWA
+        working-directory: app
+        run: |
+          flutter build apk --debug
+          flutter build appbundle --debug
+          flutter build web --release --pwa-strategy=offline-first
+          cp build/app/outputs/flutter-apk/app-debug.apk ../NationalRevivalDesk-v4.0.0-development.apk
+          cp build/app/outputs/bundle/debug/app-debug.aab ../NationalRevivalDesk-v4.0.0-development.aab
+          tar -czf ../NationalRevivalDesk-v4.0.0-web-pwa.tar.gz -C build/web .
+          sha256sum ../NationalRevivalDesk-v4.0.0-development.apk ../NationalRevivalDesk-v4.0.0-development.aab ../NationalRevivalDesk-v4.0.0-web-pwa.tar.gz > ../android-web-checksums.txt
+      - name: Upload Android and Web artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nrd-v4-android-web
+          path: |
+            NationalRevivalDesk-v4.0.0-development.apk
+            NationalRevivalDesk-v4.0.0-development.aab
+            NationalRevivalDesk-v4.0.0-web-pwa.tar.gz
+            android-web-checksums.txt
+          if-no-files-found: error
+
+  linux:
+    name: Linux AppImage DEB RPM
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev rpm ruby ruby-dev patchelf
+          sudo gem install --no-document fpm
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Reconstruct and build Linux application
+        shell: bash
+        run: |
+          base64 -d nrd_v4/flutter_ci_src.tar.gz.b64 | tar -xz
+          flutter create --platforms=linux --org org.nationalrevivaldesk --project-name national_revival_desk app
+          rsync -a flutter_ci_src/ app/
+          mkdir -p app/assets/images
+          printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZK8sAAAAASUVORK5CYII=' | base64 -d > app/assets/images/logo.png
+          cd app
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+          flutter build linux --release
+          cd ..
+          cp -a app/build/linux/x64/release/bundle linux-bundle
+          tar -czf NationalRevivalDesk-v4.0.0-linux-portable.tar.gz linux-bundle
+      - name: Package DEB and RPM
+        shell: bash
+        run: |
+          mkdir -p pkgroot/opt/national-revival-desk pkgroot/usr/share/applications pkgroot/usr/bin
+          cp -a linux-bundle/. pkgroot/opt/national-revival-desk/
+          cat > pkgroot/usr/share/applications/national-revival-desk.desktop <<'EOF'
+          [Desktop Entry]
+          Name=National Revival Desk
+          Comment=Revival coordination, planning and reporting
+          Exec=/opt/national-revival-desk/national_revival_desk
+          Icon=national-revival-desk
+          Terminal=false
+          Type=Application
+          Categories=Office;Network;
+          EOF
+          ln -s /opt/national-revival-desk/national_revival_desk pkgroot/usr/bin/national-revival-desk
+          fpm -s dir -t deb -n national-revival-desk -v 4.0.0 --license proprietary --description 'National Revival Desk' --url 'https://www.nationalrevivaldesk.com' -C pkgroot .
+          fpm -s dir -t rpm -n national-revival-desk -v 4.0.0 --license proprietary --description 'National Revival Desk' --url 'https://www.nationalrevivaldesk.com' -C pkgroot .
+          mv national-revival-desk_4.0.0_amd64.deb national-revival-desk-v4.0.0-amd64.deb
+          mv national-revival-desk-4.0.0-1.x86_64.rpm national-revival-desk-v4.0.0-x86_64.rpm
+      - name: Package AppImage
+        shell: bash
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: |
+          mkdir -p AppDir/usr/bin AppDir/usr/lib AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+          cp -a linux-bundle/. AppDir/usr/bin/
+          cat > AppDir/AppRun <<'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          exec "$HERE/usr/bin/national_revival_desk" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+          cat > AppDir/national-revival-desk.desktop <<'EOF'
+          [Desktop Entry]
+          Name=National Revival Desk
+          Exec=national_revival_desk
+          Icon=national-revival-desk
+          Type=Application
+          Categories=Office;Network;
+          EOF
+          cp AppDir/national-revival-desk.desktop AppDir/usr/share/applications/
+          printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZK8sAAAAASUVORK5CYII=' | base64 -d > AppDir/national-revival-desk.png
+          cp AppDir/national-revival-desk.png AppDir/usr/share/icons/hicolor/256x256/apps/
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O linuxdeploy
+          chmod +x linuxdeploy
+          ./linuxdeploy --appdir AppDir --output appimage
+          mv National_Revival_Desk*.AppImage NationalRevivalDesk-v4.0.0-x86_64.AppImage
+          sha256sum NationalRevivalDesk-v4.0.0-x86_64.AppImage national-revival-desk-v4.0.0-amd64.deb national-revival-desk-v4.0.0-x86_64.rpm NationalRevivalDesk-v4.0.0-linux-portable.tar.gz > linux-checksums.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nrd-v4-linux
+          path: |
+            NationalRevivalDesk-v4.0.0-x86_64.AppImage
+            national-revival-desk-v4.0.0-amd64.deb
+            national-revival-desk-v4.0.0-x86_64.rpm
+            NationalRevivalDesk-v4.0.0-linux-portable.tar.gz
+            linux-checksums.txt
+          if-no-files-found: error
+
+  windows:
+    name: Windows EXE MSIX Portable
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Reconstruct Flutter source
+        shell: pwsh
+        run: |
+          $bytes=[Convert]::FromBase64String((Get-Content nrd_v4/flutter_ci_src.tar.gz.b64 -Raw))
+          [IO.File]::WriteAllBytes('flutter-ci.tar.gz',$bytes)
+          tar -xzf flutter-ci.tar.gz
+          flutter create --platforms=windows --org org.nationalrevivaldesk --project-name national_revival_desk app
+          Copy-Item flutter_ci_src\* app -Recurse -Force
+          New-Item -ItemType Directory -Force app\assets\images | Out-Null
+          [IO.File]::WriteAllBytes('app\assets\images\logo.png',[Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZK8sAAAAASUVORK5CYII='))
+      - name: Resolve, analyze, test and build
+        shell: pwsh
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+          flutter build windows --release
+      - name: Create portable ZIP, unsigned MSIX and EXE installer
+        shell: pwsh
+        run: |
+          Compress-Archive -Path app\build\windows\x64\runner\Release\* -DestinationPath NationalRevivalDesk-v4.0.0-windows-portable.zip
+          New-Item -ItemType Directory -Force msix\Assets | Out-Null
+          Copy-Item app\build\windows\x64\runner\Release\* msix -Recurse -Force
+          [IO.File]::WriteAllBytes('msix\Assets\Logo.png',[Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZK8sAAAAASUVORK5CYII='))
+          @'
+          <?xml version="1.0" encoding="utf-8"?>
+          <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" IgnorableNamespaces="uap">
+            <Identity Name="org.nationalrevivaldesk.app" Publisher="CN=CodeTech Software Solutions" Version="4.0.0.0" ProcessorArchitecture="x64" />
+            <Properties><DisplayName>National Revival Desk</DisplayName><PublisherDisplayName>CodeTech Software Solutions</PublisherDisplayName><Logo>Assets\Logo.png</Logo></Properties>
+            <Resources><Resource Language="en-us" /></Resources>
+            <Dependencies><TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" /></Dependencies>
+            <Applications><Application Id="App" Executable="national_revival_desk.exe" EntryPoint="Windows.FullTrustApplication"><uap:VisualElements DisplayName="National Revival Desk" Description="Revival coordination, planning and reporting" BackgroundColor="transparent" Square150x150Logo="Assets\Logo.png" Square44x44Logo="Assets\Logo.png" /></Application></Applications>
+          </Package>
+          '@ | Set-Content msix\AppxManifest.xml -Encoding utf8
+          & "$env:ProgramFiles (x86)\Windows Kits\10\bin\10.0.26100.0\x64\makeappx.exe" pack /d msix /p NationalRevivalDesk-v4.0.0-unsigned.msix /o
+          choco install innosetup -y --no-progress
+          @'
+          [Setup]
+          AppId={{A8D71F65-58F0-4C21-9F9C-522D36E65C40}
+          AppName=National Revival Desk
+          AppVersion=4.0.0
+          AppPublisher=CodeTech Software Solutions
+          AppPublisherURL=https://www.nationalrevivaldesk.com
+          DefaultDirName={autopf}\National Revival Desk
+          DefaultGroupName=National Revival Desk
+          OutputBaseFilename=NationalRevivalDeskSetup-v4.0.0-unsigned
+          Compression=lzma2
+          SolidCompression=yes
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          UninstallDisplayIcon={app}\national_revival_desk.exe
+          [Files]
+          Source: "app\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+          [Icons]
+          Name: "{group}\National Revival Desk"; Filename: "{app}\national_revival_desk.exe"
+          Name: "{autodesktop}\National Revival Desk"; Filename: "{app}\national_revival_desk.exe"; Tasks: desktopicon
+          [Tasks]
+          Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked
+          [Run]
+          Filename: "{app}\national_revival_desk.exe"; Description: "Launch National Revival Desk"; Flags: nowait postinstall skipifsilent
+          '@ | Set-Content installer.iss -Encoding utf8
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' installer.iss
+          Move-Item Output\NationalRevivalDeskSetup-v4.0.0-unsigned.exe .
+          Get-FileHash NationalRevivalDesk-v4.0.0-windows-portable.zip,NationalRevivalDesk-v4.0.0-unsigned.msix,NationalRevivalDeskSetup-v4.0.0-unsigned.exe -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $($_.Path | Split-Path -Leaf)" } | Set-Content windows-checksums.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nrd-v4-windows
+          path: |
+            NationalRevivalDesk-v4.0.0-windows-portable.zip
+            NationalRevivalDesk-v4.0.0-unsigned.msix
+            NationalRevivalDeskSetup-v4.0.0-unsigned.exe
+            windows-checksums.txt
+          if-no-files-found: error
+
+  apple:
+    name: macOS and unsigned iOS archive
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Reconstruct, analyze and test
+        shell: bash
+        run: |
+          base64 -d nrd_v4/flutter_ci_src.tar.gz.b64 | tar -xz
+          flutter create --platforms=macos,ios --org org.nationalrevivaldesk --project-name national_revival_desk app
+          rsync -a flutter_ci_src/ app/
+          mkdir -p app/assets/images
+          printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZK8sAAAAASUVORK5CYII=' | base64 -d > app/assets/images/logo.png
+          cd app
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+      - name: Build unsigned macOS and iOS outputs
+        shell: bash
+        run: |
+          cd app
+          flutter build macos --release
+          ditto -c -k --sequesterRsrc --keepParent build/macos/Build/Products/Release/national_revival_desk.app ../NationalRevivalDesk-v4.0.0-macOS-unsigned.zip
+          hdiutil create -volname 'National Revival Desk' -srcfolder build/macos/Build/Products/Release/national_revival_desk.app -ov -format UDZO ../NationalRevivalDesk-v4.0.0-unsigned.dmg
+          pkgbuild --root build/macos/Build/Products/Release/national_revival_desk.app --identifier org.nationalrevivaldesk.app --version 4.0.0 --install-location '/Applications/National Revival Desk.app' ../NationalRevivalDesk-v4.0.0-unsigned.pkg
+          flutter build ios --release --no-codesign
+          ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app ../NationalRevivalDesk-v4.0.0-iOS-unsigned-RunnerApp.zip
+          cd ..
+          shasum -a 256 NationalRevivalDesk-v4.0.0-macOS-unsigned.zip NationalRevivalDesk-v4.0.0-unsigned.dmg NationalRevivalDesk-v4.0.0-unsigned.pkg NationalRevivalDesk-v4.0.0-iOS-unsigned-RunnerApp.zip > apple-checksums.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nrd-v4-apple-unsigned
+          path: |
+            NationalRevivalDesk-v4.0.0-macOS-unsigned.zip
+            NationalRevivalDesk-v4.0.0-unsigned.dmg
+            NationalRevivalDesk-v4.0.0-unsigned.pkg
+            NationalRevivalDesk-v4.0.0-iOS-unsigned-RunnerApp.zip
+            apple-checksums.txt
+          if-no-files-found: error
