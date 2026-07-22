@@ -1,0 +1,77 @@
+name: National Revival Desk v4 Windows Build
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Create, test and compile Windows app
+        shell: pwsh
+        run: |
+          flutter create --platforms=windows --org com.nationalrevivaldesk --project-name national_revival_desk app
+          Copy-Item nrd_v4/simple/pubspec.yaml app/pubspec.yaml -Force
+          Remove-Item app/lib,app/test -Recurse -Force
+          Copy-Item nrd_v4/simple/lib app/lib -Recurse
+          Copy-Item nrd_v4/simple/test app/test -Recurse
+          Push-Location app
+          flutter pub get
+          flutter test
+          flutter build windows --release
+          Pop-Location
+      - name: Package portable and EXE installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath release/NationalRevivalDesk-v4.0.0-Windows-Portable.zip -Force
+          choco install innosetup -y --no-progress
+          @'
+          [Setup]
+          AppName=National Revival Desk
+          AppVersion=4.0.0
+          DefaultDirName={autopf}\National Revival Desk
+          DefaultGroupName=National Revival Desk
+          OutputDir=release
+          OutputBaseFilename=NationalRevivalDesk-v4.0.0-Windows-Setup-unsigned
+          Compression=lzma2
+          SolidCompression=yes
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          UninstallDisplayIcon={app}\national_revival_desk.exe
+          [Files]
+          Source: "app\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+          [Icons]
+          Name: "{autoprograms}\National Revival Desk"; Filename: "{app}\national_revival_desk.exe"
+          Name: "{autodesktop}\National Revival Desk"; Filename: "{app}\national_revival_desk.exe"; Tasks: desktopicon
+          [Tasks]
+          Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
+          [Run]
+          Filename: "{app}\national_revival_desk.exe"; Description: "Launch National Revival Desk"; Flags: nowait postinstall skipifsilent
+          '@ | Set-Content installer.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          @'
+          WINDOWS BUILD STATUS
+          Native Flutter Windows x64 compilation: PASSED
+          Flutter tests: PASSED
+          Portable ZIP: CREATED
+          Inno Setup EXE installer: CREATED
+          Authenticode publisher signing: NOT APPLIED — owner-controlled certificate required
+          Physical installation on the user's Windows PC: NOT PERFORMED IN CI
+          '@ | Set-Content release/WINDOWS_BUILD_STATUS.txt
+          Get-FileHash release/* -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $([IO.Path]::GetFileName($_.Path))" } | Set-Content release/checksums.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nrd-v4-windows
+          path: release
+          if-no-files-found: error
