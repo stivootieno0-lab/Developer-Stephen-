@@ -32,19 +32,25 @@ jobs:
         id: packages
         continue-on-error: true
         working-directory: app
-        run: flutter pub get 2>&1 | tee ../android-web-pub-get.log
+        run: |
+          set -o pipefail
+          flutter pub get 2>&1 | tee ../android-web-pub-get.log
       - name: Analyze source
         id: analyze
         if: steps.packages.outcome == 'success'
         continue-on-error: true
         working-directory: app
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee ../android-web-analyze.log
+        run: |
+          set -o pipefail
+          flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee ../android-web-analyze.log
       - name: Run tests
         id: tests
         if: steps.packages.outcome == 'success'
         continue-on-error: true
         working-directory: app
-        run: flutter test 2>&1 | tee ../android-web-test.log
+        run: |
+          set -o pipefail
+          flutter test 2>&1 | tee ../android-web-test.log
       - name: Upload validation logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,17 +75,23 @@ jobs:
         id: apk
         continue-on-error: true
         working-directory: app
-        run: flutter build apk --release 2>&1 | tee ../android-apk-build.log
+        run: |
+          set -o pipefail
+          flutter build apk --release 2>&1 | tee ../android-apk-build.log
       - name: Compile Android AAB
         id: aab
         continue-on-error: true
         working-directory: app
-        run: flutter build appbundle --release 2>&1 | tee ../android-aab-build.log
+        run: |
+          set -o pipefail
+          flutter build appbundle --release 2>&1 | tee ../android-aab-build.log
       - name: Compile Web PWA
         id: web
         continue-on-error: true
         working-directory: app
-        run: flutter build web --release --pwa-strategy=offline-first 2>&1 | tee ../web-pwa-build.log
+        run: |
+          set -o pipefail
+          flutter build web --release --pwa-strategy=offline-first 2>&1 | tee ../web-pwa-build.log
       - name: Upload compiler logs
         if: always()
         uses: actions/upload-artifact@v4
