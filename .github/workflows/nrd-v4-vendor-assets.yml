@@ -15,8 +15,9 @@ jobs:
           node-version: '22'
       - name: Install pinned packages and collect local assets
         run: |
+          set -euo pipefail
           npm init -y
-          npm install --save-exact bootstrap@5.3.3 bootstrap-icons@1.11.3 chart.js@4.4.1
+          npm install --save-exact --ignore-scripts --no-audit --no-fund bootstrap@5.3.3 bootstrap-icons@1.11.3 chart.js@4.4.1
           mkdir -p vendor/bootstrap vendor/bootstrap-icons/fonts vendor/chartjs
           cp node_modules/bootstrap/dist/css/bootstrap.min.css vendor/bootstrap/
           cp node_modules/bootstrap/dist/js/bootstrap.bundle.min.js vendor/bootstrap/
@@ -24,7 +25,7 @@ jobs:
           cp node_modules/bootstrap-icons/font/fonts/bootstrap-icons.woff2 vendor/bootstrap-icons/fonts/
           cp node_modules/bootstrap-icons/font/fonts/bootstrap-icons.woff vendor/bootstrap-icons/fonts/
           cp node_modules/chart.js/dist/chart.umd.js vendor/chartjs/chart.umd.min.js
-          sha256sum vendor/bootstrap/* vendor/bootstrap-icons/* vendor/bootstrap-icons/fonts/* vendor/chartjs/* > vendor/checksums.txt
+          find vendor -type f -print0 | sort -z | xargs -0 sha256sum > vendor/checksums.txt
       - uses: actions/upload-artifact@v4
         with:
           name: nrd-v4-vendor-assets
