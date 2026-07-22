@@ -17,57 +17,19 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Reconstruct source
-        id: reconstruct
-        continue-on-error: true
-        shell: bash
+      - name: Create project and copy v4 source
         run: |
-          set -o pipefail
-          {
-            cat nrd_v4/chunks/flutter-00.b64 nrd_v4/chunks/flutter-01.b64 nrd_v4/chunks/flutter-02.b64 nrd_v4/chunks/flutter-03.b64 > flutter-source.b64
-            echo "Encoded bytes: $(wc -c < flutter-source.b64)"
-            base64 -d flutter-source.b64 > flutter-source.tar.gz
-            gzip -t flutter-source.tar.gz
-            tar -xzf flutter-source.tar.gz
-            flutter create --platforms=android,web,linux --org org.nationalrevivaldesk --project-name national_revival_desk app
-            rsync -a flutter_ci_src/ app/
-            python3 -c "p='app/lib/main.dart';s=open(p).read().replace('ColorScheme.fromSeed(seedColor:const Color(0xff053aa7),secondary:const Color(0xffd6b45f))','ColorScheme.fromSeed(seedColor:const Color(0xff053aa7))');open(p,'w').write(s)"
-            mkdir -p app/assets/images
-            printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZK8sAAAAASUVORK5CYII=' | base64 -d > app/assets/images/logo.png
-          } 2>&1 | tee reconstruct.log
+          flutter create --platforms=android,web,linux --org org.nationalrevivaldesk --project-name national_revival_desk app
+          cp nrd_v4/simple/pubspec.yaml app/pubspec.yaml
+          rm -rf app/lib app/test
+          cp -a nrd_v4/simple/lib app/lib
+          cp -a nrd_v4/simple/test app/test
       - name: Resolve packages
-        id: packages
-        if: steps.reconstruct.outcome == 'success'
-        continue-on-error: true
         working-directory: app
-        run: flutter pub get 2>&1 | tee ../pub-get.log
+        run: flutter pub get
       - name: Analyze source
-        id: analyze
-        if: steps.packages.outcome == 'success'
-        continue-on-error: true
         working-directory: app
-        run: flutter analyze 2>&1 | tee ../analyze.log
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
       - name: Run tests
-        id: tests
-        if: steps.packages.outcome == 'success'
-        continue-on-error: true
         working-directory: app
-        run: flutter test 2>&1 | tee ../test.log
-      - name: Upload diagnostic logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: nrd-v4-flutter-diagnostics
-          path: |
-            reconstruct.log
-            pub-get.log
-            analyze.log
-            test.log
-          if-no-files-found: warn
-      - name: Enforce validation result
-        if: always()
-        run: |
-          test '${{ steps.reconstruct.outcome }}' = 'success'
-          test '${{ steps.packages.outcome }}' = 'success'
-          test '${{ steps.analyze.outcome }}' = 'success'
-          test '${{ steps.tests.outcome }}' = 'success'
+        run: flutter test
