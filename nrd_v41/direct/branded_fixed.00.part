@@ -1,0 +1,128 @@
+import 'package:flutter/material.dart';
+
+import 'app_state.dart';
+import 'catalog.dart';
+import 'forms.dart';
+import 'nrd_theme.dart';
+import 'radio_controller.dart';
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key, required this.state});
+  final AppState state;
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final email = TextEditingController();
+  final password = TextEditingController();
+  String error = '';
+
+  @override
+  void dispose() {
+    email.dispose();
+    password.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width > 820;
+    return Scaffold(
+      body: Row(
+        children: [
+          if (wide)
+            Expanded(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [NrdColors.navyDeep, NrdColors.blue],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(48),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Image.asset('assets/images/logo.png', height: 120),
+                        const SizedBox(height: 28),
+                        const Text(
+                          'UNITING FOR REVIVAL',
+                          style: TextStyle(color: Colors.white, fontSize: 42, fontWeight: FontWeight.w900),
+                        ),
+                        const Text(
+                          'TRANSFORMING NATIONS TOGETHER',
+                          style: TextStyle(color: NrdColors.sky, fontSize: 22, fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 18),
+                        const Text('Coordinate • Plan • Report • Revive', style: TextStyle(color: Colors.white70, fontSize: 17)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Expanded(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(28),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Image.asset('assets/images/logo.png', height: 94),
+                      const SizedBox(height: 20),
+                      Text('Welcome back', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium),
+                      const SizedBox(height: 7),
+                      const Text('Sign in to the National Revival Desk', textAlign: TextAlign.center, style: TextStyle(color: NrdColors.muted)),
+                      const SizedBox(height: 28),
+                      TextField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Official email', prefixIcon: Icon(Icons.mail_outline))),
+                      const SizedBox(height: 13),
+                      TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline))),
+                      if (error.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error, style: const TextStyle(color: Colors.red))),
+                      const SizedBox(height: 18),
+                      FilledButton.icon(
+                        onPressed: widget.state.busy ? null : _login,
+                        icon: const Icon(Icons.login),
+                        label: Text(widget.state.busy ? 'Signing in…' : 'Sign in'),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RegistrationPage(state: widget.state))),
+                        icon: const Icon(Icons.person_add_alt_1),
+                        label: const Text('Register as Coordinator'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _login() async {
+    try {
+      await widget.state.login(email.text.trim(), password.text);
+      if (mounted) setState(() => error = '');
+    } catch (exception) {
+      if (mounted) setState(() => error = exception.toString());
+    }
+  }
+}
+
+class HomePage extends StatefulWidget {
+  const HomePage({super.key, required this.state});
+  final AppState state;
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
