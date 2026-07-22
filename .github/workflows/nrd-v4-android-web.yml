@@ -23,7 +23,7 @@ jobs:
       - name: Create validated application project
         run: |
           set -euo pipefail
-          flutter create --platforms=android,web --org com.nationalrevivaldesk --project-name national_revival_desk app
+          flutter create --platforms=android,web,linux --org com.nationalrevivaldesk --project-name national_revival_desk app
           cp nrd_v4/simple/pubspec.yaml app/pubspec.yaml
           rm -rf app/lib app/test
           cp -a nrd_v4/simple/lib app/lib
