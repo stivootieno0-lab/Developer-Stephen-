@@ -25,11 +25,35 @@ jobs:
           cp -a nrd_v4/simple/lib app/lib
           cp -a nrd_v4/simple/test app/test
       - name: Resolve packages
+        id: packages
+        continue-on-error: true
         working-directory: app
-        run: flutter pub get
+        run: flutter pub get 2>&1 | tee ../pub-get.log
       - name: Analyze source
+        id: analyze
+        if: steps.packages.outcome == 'success'
+        continue-on-error: true
         working-directory: app
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee ../analyze.log
       - name: Run tests
+        id: tests
+        if: steps.packages.outcome == 'success'
+        continue-on-error: true
         working-directory: app
-        run: flutter test
+        run: flutter test 2>&1 | tee ../test.log
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nrd-v4-simple-diagnostics
+          path: |
+            pub-get.log
+            analyze.log
+            test.log
+          if-no-files-found: warn
+      - name: Enforce results
+        if: always()
+        run: |
+          test '${{ steps.packages.outcome }}' = 'success'
+          test '${{ steps.analyze.outcome }}' = 'success'
+          test '${{ steps.tests.outcome }}' = 'success'
