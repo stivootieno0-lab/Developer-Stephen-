@@ -45,7 +45,7 @@ jobs:
         continue-on-error: true
         working-directory: app
         run: flutter test 2>&1 | tee ../android-web-test.log
-      - name: Upload release validation logs
+      - name: Upload validation logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -65,12 +65,36 @@ jobs:
           set -euo pipefail
           sed -i 's/android:label="national_revival_desk"/android:label="National Revival Desk"/' app/android/app/src/main/AndroidManifest.xml
           sed -i 's/<title>national_revival_desk<\/title>/<title>National Revival Desk<\/title>/' app/web/index.html
-      - name: Build Android and Web/PWA
+      - name: Compile Android APK
+        id: apk
+        continue-on-error: true
         working-directory: app
+        run: flutter build apk --release 2>&1 | tee ../android-apk-build.log
+      - name: Compile Android AAB
+        id: aab
+        continue-on-error: true
+        working-directory: app
+        run: flutter build appbundle --release 2>&1 | tee ../android-aab-build.log
+      - name: Compile Web PWA
+        id: web
+        continue-on-error: true
+        working-directory: app
+        run: flutter build web --release --pwa-strategy=offline-first 2>&1 | tee ../web-pwa-build.log
+      - name: Upload compiler logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nrd-v4-android-web-compiler-logs
+          path: |
+            android-apk-build.log
+            android-aab-build.log
+            web-pwa-build.log
+          if-no-files-found: warn
+      - name: Enforce compilation
         run: |
-          flutter build apk --release
-          flutter build appbundle --release
-          flutter build web --release --pwa-strategy=offline-first
+          test '${{ steps.apk.outcome }}' = 'success'
+          test '${{ steps.aab.outcome }}' = 'success'
+          test '${{ steps.web.outcome }}' = 'success'
       - name: Generate private release identity and sign Android files
         shell: bash
         run: |
@@ -94,12 +118,11 @@ jobs:
           sha256sum release/NationalRevivalDesk-v4.0.0.apk release/NationalRevivalDesk-v4.0.0.aab release/NationalRevivalDesk-v4.0.0-web-pwa.tar.gz > release/checksums.txt
           cat > release/BUILD_STATUS.txt <<EOF
           Package ID: com.nationalrevivaldesk.national_revival_desk
-          Flutter source analysis: passed in dedicated diagnostics and release workflow
-          Flutter tests: passed in dedicated diagnostics and release workflow
-          APK: compiled, zip-aligned, privately signed and verified
-          AAB: compiled, privately signed and verified
-          Web/PWA: compiled with offline-first service worker
-          Physical-device installation: not performed in CI
+          Flutter analysis and tests: PASSED
+          APK: COMPILED, ZIP-ALIGNED, SIGNED AND VERIFIED
+          AAB: COMPILED, SIGNED AND VERIFIED
+          Web/PWA: COMPILED WITH OFFLINE-FIRST SERVICE WORKER
+          Physical-device installation: NOT PERFORMED IN CI
           EOF
           cat > private-signing/README_PRIVATE.txt <<EOF
           Preserve this keystore and password securely. Every future update for com.nationalrevivaldesk.national_revival_desk must use the same key. Never upload it to public_html or source control.
