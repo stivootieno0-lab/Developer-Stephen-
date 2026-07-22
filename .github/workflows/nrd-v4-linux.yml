@@ -43,17 +43,34 @@ jobs:
           if-no-files-found: warn
       - name: Enforce Linux compilation
         run: test '${{ steps.compile.outcome }}' = 'success'
-      - name: Package portable DEB RPM and AppImage
+      - name: Prepare Linux package workspace and portable archive
         run: |
           set -euo pipefail
-          mkdir -p release
+          mkdir -p release packaging
           BUNDLE="$PWD/app/build/linux/x64/release/bundle"
           test -x "$BUNDLE/national_revival_desk"
           tar -czf release/NationalRevivalDesk-v4.0.0-Linux-Portable-x64.tar.gz -C "$BUNDLE" .
+          printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZK8sAAAAASUVORK5CYII=' | base64 -d > packaging/national-revival-desk.png
+          cat > packaging/national-revival-desk.desktop <<'EOF'
+          [Desktop Entry]
+          Name=National Revival Desk
+          Exec=/opt/national-revival-desk/national_revival_desk
+          Icon=national-revival-desk
+          Type=Application
+          Categories=Office;Utility;
+          Terminal=false
+          EOF
+      - name: Package DEB
+        id: deb
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          BUNDLE="$PWD/app/build/linux/x64/release/bundle"
           mkdir -p deb/DEBIAN deb/opt/national-revival-desk deb/usr/bin deb/usr/share/applications deb/usr/share/icons/hicolor/256x256/apps
           cp -a "$BUNDLE/." deb/opt/national-revival-desk/
           ln -s /opt/national-revival-desk/national_revival_desk deb/usr/bin/national-revival-desk
-          cp app/linux/runner/resources/app_icon.png deb/usr/share/icons/hicolor/256x256/apps/national-revival-desk.png
+          cp packaging/national-revival-desk.png deb/usr/share/icons/hicolor/256x256/apps/national-revival-desk.png
+          cp packaging/national-revival-desk.desktop deb/usr/share/applications/
           cat > deb/DEBIAN/control <<'EOF'
           Package: national-revival-desk
           Version: 4.0.0
@@ -64,16 +81,14 @@ jobs:
           Maintainer: National Revival Desk
           Description: National revival coordination, planning, reporting and radio application.
           EOF
-          cat > deb/usr/share/applications/national-revival-desk.desktop <<'EOF'
-          [Desktop Entry]
-          Name=National Revival Desk
-          Exec=/opt/national-revival-desk/national_revival_desk
-          Icon=national-revival-desk
-          Type=Application
-          Categories=Office;Utility;
-          Terminal=false
-          EOF
           dpkg-deb --build deb release/NationalRevivalDesk-v4.0.0-amd64.deb
+          dpkg-deb --info release/NationalRevivalDesk-v4.0.0-amd64.deb > release/DEB_PACKAGE_REPORT.txt
+      - name: Package RPM
+        id: rpm
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          BUNDLE="$PWD/app/build/linux/x64/release/bundle"
           mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
           tar -czf rpmbuild/SOURCES/national-revival-desk-4.0.0.tar.gz -C "$BUNDLE" .
           cat > rpmbuild/SPECS/national-revival-desk.spec <<'EOF'
@@ -96,11 +111,20 @@ jobs:
           /usr/bin/national-revival-desk
           EOF
           rpmbuild --define "_topdir $PWD/rpmbuild" -bb rpmbuild/SPECS/national-revival-desk.spec
-          find rpmbuild/RPMS -name '*.rpm' -exec cp {} release/NationalRevivalDesk-v4.0.0-x86_64.rpm \;
+          RPM=$(find rpmbuild/RPMS -name '*.rpm' -print -quit)
+          test -n "$RPM"
+          cp "$RPM" release/NationalRevivalDesk-v4.0.0-x86_64.rpm
+          rpm -qip release/NationalRevivalDesk-v4.0.0-x86_64.rpm > release/RPM_PACKAGE_REPORT.txt
+      - name: Package AppImage
+        id: appimage
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          BUNDLE="$PWD/app/build/linux/x64/release/bundle"
           mkdir -p AppDir/usr/bin
           cp -a "$BUNDLE/." AppDir/usr/bin/
-          cp app/linux/runner/resources/app_icon.png AppDir/national-revival-desk.png
-          cp deb/usr/share/applications/national-revival-desk.desktop AppDir/national-revival-desk.desktop
+          cp packaging/national-revival-desk.png AppDir/national-revival-desk.png
+          cp packaging/national-revival-desk.desktop AppDir/national-revival-desk.desktop
           cat > AppDir/AppRun <<'EOF'
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "$0")")"
@@ -111,13 +135,19 @@ jobs:
           wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
           ARCH=x86_64 ./appimagetool --appimage-extract-and-run AppDir release/NationalRevivalDesk-v4.0.0-x86_64.AppImage
+          file release/NationalRevivalDesk-v4.0.0-x86_64.AppImage > release/APPIMAGE_PACKAGE_REPORT.txt
+      - name: Enforce Linux packages and finalize reports
+        run: |
+          test '${{ steps.deb.outcome }}' = 'success'
+          test '${{ steps.rpm.outcome }}' = 'success'
+          test '${{ steps.appimage.outcome }}' = 'success'
           cat > release/LINUX_BUILD_STATUS.txt <<'EOF'
           Native Flutter Linux x64 compilation: PASSED
           Shared Flutter analyzer and tests: PASSED in mandatory diagnostics workflow for this release commit
           Portable TAR.GZ: CREATED
-          DEB: CREATED
-          RPM: CREATED
-          AppImage: CREATED
+          DEB: CREATED AND INSPECTED
+          RPM: CREATED AND INSPECTED
+          AppImage: CREATED AND INSPECTED
           Runtime testing on the user's Linux distribution: NOT PERFORMED IN CI
           EOF
           sha256sum release/* > release/checksums.txt
