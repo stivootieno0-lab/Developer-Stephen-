@@ -18,19 +18,22 @@ jobs:
           channel: stable
           cache: true
       - name: Reconstruct source
+        id: reconstruct
+        continue-on-error: true
+        shell: bash
         run: |
-          base64 -d nrd_v4/flutter_ci_src.tar.gz.b64 | tar -xz
-          flutter create --platforms=android,web,linux --org org.nationalrevivaldesk --project-name national_revival_desk app
-          rsync -a flutter_ci_src/ app/
-          python3 - <<'PY'
-          p='app/lib/main.dart'
-          s=open(p).read().replace("ColorScheme.fromSeed(seedColor:const Color(0xff053aa7),secondary:const Color(0xffd6b45f))","ColorScheme.fromSeed(seedColor:const Color(0xff053aa7))")
-          open(p,'w').write(s)
-          PY
-          mkdir -p app/assets/images
-          printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZK8sAAAAASUVORK5CYII=' | base64 -d > app/assets/images/logo.png
+          set -o pipefail
+          {
+            base64 -d nrd_v4/flutter_ci_src.tar.gz.b64 | tar -xz
+            flutter create --platforms=android,web,linux --org org.nationalrevivaldesk --project-name national_revival_desk app
+            rsync -a flutter_ci_src/ app/
+            python3 -c "p='app/lib/main.dart';s=open(p).read().replace('ColorScheme.fromSeed(seedColor:const Color(0xff053aa7),secondary:const Color(0xffd6b45f))','ColorScheme.fromSeed(seedColor:const Color(0xff053aa7))');open(p,'w').write(s)"
+            mkdir -p app/assets/images
+            printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZK8sAAAAASUVORK5CYII=' | base64 -d > app/assets/images/logo.png
+          } 2>&1 | tee reconstruct.log
       - name: Resolve packages
         id: packages
+        if: steps.reconstruct.outcome == 'success'
         continue-on-error: true
         working-directory: app
         run: flutter pub get 2>&1 | tee ../pub-get.log
@@ -52,6 +55,7 @@ jobs:
         with:
           name: nrd-v4-flutter-diagnostics
           path: |
+            reconstruct.log
             pub-get.log
             analyze.log
             test.log
@@ -59,6 +63,7 @@ jobs:
       - name: Enforce validation result
         if: always()
         run: |
+          test '${{ steps.reconstruct.outcome }}' = 'success'
           test '${{ steps.packages.outcome }}' = 'success'
           test '${{ steps.analyze.outcome }}' = 'success'
           test '${{ steps.tests.outcome }}' = 'success'
