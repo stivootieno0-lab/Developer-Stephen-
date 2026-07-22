@@ -1,0 +1,75 @@
+name: National Revival Desk v4 Android and Web
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  APP_VERSION: 4.0.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Create application project
+        run: |
+          flutter create --platforms=android,web --org com.nationalrevivaldesk --project-name app app
+          cp nrd_v4/simple/pubspec.yaml app/pubspec.yaml
+          rm -rf app/lib app/test
+          cp -a nrd_v4/simple/lib app/lib
+          cp -a nrd_v4/simple/test app/test
+      - name: Validate Flutter source
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+      - name: Build Android and Web/PWA
+        working-directory: app
+        run: |
+          flutter build apk --release
+          flutter build appbundle --release
+          flutter build web --release --pwa-strategy=offline-first
+      - name: Generate private release identity and sign Android files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release private-signing
+          PASS=$(openssl rand -hex 24)
+          echo "$PASS" > private-signing/keystore-password.txt
+          keytool -genkeypair -v -keystore private-signing/NationalRevivalDesk-v4-release.jks -storepass "$PASS" -keypass "$PASS" -alias national-revival-desk-v4 -keyalg RSA -keysize 4096 -validity 10000 -dname 'CN=National Revival Desk v4, OU=CodeTech Software Solutions, O=National Revival Desk, L=Nairobi, ST=Nairobi, C=KE'
+          SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          BUILD_TOOLS=$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          cp app/build/app/outputs/flutter-apk/app-release.apk release/NationalRevivalDesk-v4.0.0-unsigned.apk
+          "$BUILD_TOOLS/zipalign" -f -p 4 release/NationalRevivalDesk-v4.0.0-unsigned.apk release/NationalRevivalDesk-v4.0.0.apk
+          "$BUILD_TOOLS/apksigner" sign --ks private-signing/NationalRevivalDesk-v4-release.jks --ks-key-alias national-revival-desk-v4 --ks-pass pass:"$PASS" --key-pass pass:"$PASS" --out release/NationalRevivalDesk-v4.0.0-signed.apk release/NationalRevivalDesk-v4.0.0.apk
+          mv release/NationalRevivalDesk-v4.0.0-signed.apk release/NationalRevivalDesk-v4.0.0.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs release/NationalRevivalDesk-v4.0.0.apk > release/APK_SIGNATURE_REPORT.txt
+          cp app/build/app/outputs/bundle/release/app-release.aab release/NationalRevivalDesk-v4.0.0.aab
+          zip -d release/NationalRevivalDesk-v4.0.0.aab 'META-INF/*' >/dev/null 2>&1 || true
+          jarsigner -keystore private-signing/NationalRevivalDesk-v4-release.jks -storepass "$PASS" -keypass "$PASS" -sigalg SHA256withRSA -digestalg SHA-256 release/NationalRevivalDesk-v4.0.0.aab national-revival-desk-v4
+          jarsigner -verify -verbose -certs release/NationalRevivalDesk-v4.0.0.aab > release/AAB_SIGNATURE_REPORT.txt
+          tar -czf release/NationalRevivalDesk-v4.0.0-web-pwa.tar.gz -C app/build/web .
+          sha256sum release/NationalRevivalDesk-v4.0.0.apk release/NationalRevivalDesk-v4.0.0.aab release/NationalRevivalDesk-v4.0.0-web-pwa.tar.gz > release/checksums.txt
+          cat > private-signing/README_PRIVATE.txt <<EOF
+          Preserve this keystore and password securely. Every future update for com.nationalrevivaldesk.app must use the same key. Never upload it to public_html or source control.
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nrd-v4-android-web
+          path: release
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nrd-v4-android-signing-private
+          path: private-signing
+          if-no-files-found: error
