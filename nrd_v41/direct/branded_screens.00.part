@@ -1,0 +1,29 @@
+import 'package:flutter/material.dart';
+import 'app_state.dart';
+import 'catalog.dart';
+import 'forms.dart';
+import 'nrd_theme.dart';
+import 'radio_controller.dart';
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key, required this.state});
+  final AppState state;
+  @override State<LoginPage> createState() => _LoginPageState();
+}
+class _LoginPageState extends State<LoginPage> {
+  final email=TextEditingController(), password=TextEditingController(); String error='';
+  @override void dispose(){email.dispose();password.dispose();super.dispose();}
+  @override Widget build(BuildContext context)=>Scaffold(body:Row(children:[
+    if(MediaQuery.sizeOf(context).width>820) Expanded(child:Container(decoration:const BoxDecoration(gradient:LinearGradient(colors:[NrdColors.navyDeep,NrdColors.blue],begin:Alignment.topLeft,end:Alignment.bottomRight)),child:Center(child:Padding(padding:const EdgeInsets.all(48),child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[Image.asset('assets/images/logo.png',height:120),const SizedBox(height:28),const Text('UNITING FOR REVIVAL',style:TextStyle(color:Colors.white,fontSize:42,fontWeight:FontWeight.w900,letterSpacing:-1.5)),const Text('TRANSFORMING NATIONS TOGETHER',style:TextStyle(color:NrdColors.sky,fontSize:22,fontWeight:FontWeight.w800)),const SizedBox(height:18),const Text('Coordinate • Plan • Report • Revive',style:TextStyle(color:Colors.white70,fontSize:17))])))),
+    Expanded(child:Center(child:SingleChildScrollView(padding:const EdgeInsets.all(28),child:ConstrainedBox(constraints:const BoxConstraints(maxWidth:440),child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[Image.asset('assets/images/logo.png',height:94),const SizedBox(height:20),Text('Welcome back',textAlign:TextAlign.center,style:Theme.of(context).textTheme.headlineMedium),const SizedBox(height:7),const Text('Sign in to the National Revival Desk',textAlign:TextAlign.center,style:TextStyle(color:NrdColors.muted)),const SizedBox(height:28),TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:const InputDecoration(labelText:'Official email',prefixIcon:Icon(Icons.mail_outline))),const SizedBox(height:13),TextField(controller:password,obscureText:true,decoration:const InputDecoration(labelText:'Password',prefixIcon:Icon(Icons.lock_outline))),if(error.isNotEmpty) Padding(padding:const EdgeInsets.only(top:12),child:Text(error,style:const TextStyle(color:Colors.red))),const SizedBox(height:18),FilledButton.icon(onPressed:widget.state.busy?null:()async{try{await widget.state.login(email.text.trim(),password.text);if(mounted)setState(()=>error='');}catch(e){if(mounted)setState(()=>error=e.toString());}},icon:const Icon(Icons.login),label:Text(widget.state.busy?'Signing in…':'Sign in')),const SizedBox(height:10),OutlinedButton.icon(onPressed:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>RegistrationPage(state:widget.state))),icon:const Icon(Icons.person_add_alt_1),label:const Text('Register as Coordinator'))])))))
+  ]));
+}
+
+class HomePage extends StatefulWidget{const HomePage({super.key,required this.state});final AppState state;@override State<HomePage> createState()=>_HomePageState();}
+class _HomePageState extends State<HomePage>{int index=0;final radio=NrdRadioController.instance;
+  final labels=const['Dashboard','New Report','Weekly Plan','Offline Queue'];
+  final icons=const[Icons.dashboard_rounded,Icons.description_rounded,Icons.calendar_month_rounded,Icons.cloud_sync_rounded];
+  @override Widget build(BuildContext context){final pages=[Dashboard(state:widget.state,radio:radio),ReportForm(state:widget.state),PlanForm(state:widget.state),QueuePage(state:widget.state)];return LayoutBuilder(builder:(context,c){final wide=c.maxWidth>=900;return Scaffold(appBar:AppBar(title:Text(labels[index]),leading:wide?null:null,actions:[Icon(widget.state.online?Icons.cloud_done_rounded:Icons.cloud_off_rounded,color:widget.state.online?NrdColors.success:Colors.red),IconButton(tooltip:'Synchronize',onPressed:widget.state.sync,icon:const Icon(Icons.sync_rounded)),AnimatedBuilder(animation:radio,builder:(_,__)=>IconButton(tooltip:radio.playing?'Pause radio':'Play radio',onPressed:radio.toggle,icon:Icon(radio.playing?Icons.pause_circle_filled:Icons.radio_rounded,color:NrdColors.blue))),PopupMenuButton<String>(onSelected:(_)=>widget.state.logout(),itemBuilder:(_)=>const[PopupMenuItem(value:'logout',child:Text('Logout'))])]),body:wide?Row(children:[NavigationRail(backgroundColor:NrdColors.navyDeep,indicatorColor:NrdColors.blue,selectedIconTheme:const IconThemeData(color:Colors.white),unselectedIconTheme:const IconThemeData(color:Colors.white70),labelType:NavigationRailLabelType.all,selectedLabelTextStyle:const TextStyle(color:Colors.white,fontWeight:FontWeight.w800),unselectedLabelTextStyle:const TextStyle(color:Colors.white70),leading:Padding(padding:const EdgeInsets.symmetric(vertical:16),child:Image.asset('assets/images/logo.png',height:58)),selectedIndex:index,onDestinationSelected:(v)=>setState(()=>index=v),destinations:List.generate(4,(i)=>NavigationRailDestination(icon:Icon(icons[i]),label:Text(labels[i])))),Expanded(child:pages[index])]):pages[index],bottomNavigationBar:wide?null:NavigationBar(selectedIndex:index,onDestinationSelected:(v)=>setState(()=>index=v),destinations:List.generate(4,(i)=>NavigationDestination(icon:Icon(icons[i]),label:labels[i]))));});}
+}
+
+class Dashboard extends StatelessWidget{const Dashboard({super.key,required this.state,required this.radio});final AppState state;final NrdRadioController radio;
