@@ -1,0 +1,26 @@
+name: national_revival_desk
+description: National Revival Desk professional multi-platform application.
+publish_to: none
+version: 4.1.0+41000
+environment:
+  sdk: '>=3.6.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.2
+  shared_preferences: ^2.3.2
+  connectivity_plus: ^6.0.5
+  just_audio: ^0.10.6
+  just_audio_background: ^0.0.1-beta.17
+  audio_service: ^0.18.19
+  audio_session: ^0.2.4
+  uuid: ^4.5.1
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/logo.png
+    - assets/images/nrd-crowd-hero.webp
