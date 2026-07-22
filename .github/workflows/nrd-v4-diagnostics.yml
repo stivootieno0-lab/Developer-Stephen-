@@ -1,0 +1,59 @@
+name: National Revival Desk v4 Flutter Diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Reconstruct source
+        run: |
+          base64 -d nrd_v4/flutter_ci_src.tar.gz.b64 | tar -xz
+          flutter create --platforms=android,web,linux --org org.nationalrevivaldesk --project-name national_revival_desk app
+          rsync -a flutter_ci_src/ app/
+          mkdir -p app/assets/images
+          printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZK8sAAAAASUVORK5CYII=' | base64 -d > app/assets/images/logo.png
+      - name: Resolve packages
+        id: packages
+        continue-on-error: true
+        working-directory: app
+        run: flutter pub get 2>&1 | tee ../pub-get.log
+      - name: Analyze source
+        id: analyze
+        if: steps.packages.outcome == 'success'
+        continue-on-error: true
+        working-directory: app
+        run: flutter analyze 2>&1 | tee ../analyze.log
+      - name: Run tests
+        id: tests
+        if: steps.packages.outcome == 'success'
+        continue-on-error: true
+        working-directory: app
+        run: flutter test 2>&1 | tee ../test.log
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nrd-v4-flutter-diagnostics
+          path: |
+            pub-get.log
+            analyze.log
+            test.log
+          if-no-files-found: warn
+      - name: Enforce validation result
+        if: always()
+        run: |
+          test '${{ steps.packages.outcome }}' = 'success'
+          test '${{ steps.analyze.outcome }}' = 'success'
+          test '${{ steps.tests.outcome }}' = 'success'
