@@ -1,0 +1,101 @@
+          animation: radio,
+          builder: (context, _) => Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                children: [
+                  Container(width: 54, height: 54, decoration: const BoxDecoration(color: NrdColors.navy, borderRadius: BorderRadius.all(Radius.circular(14))), child: const Icon(Icons.radio_rounded, color: Colors.white)),
+                  const SizedBox(width: 14),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Jesus is LORD Radio', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: NrdColors.navy)), Text(radio.status, style: const TextStyle(color: NrdColors.muted))])),
+                  IconButton.filled(onPressed: radio.toggle, icon: Icon(radio.playing ? Icons.pause_rounded : Icons.play_arrow_rounded)),
+                  IconButton(onPressed: radio.stop, icon: const Icon(Icons.stop_rounded)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _stat(String label, String value, IconData icon) => SizedBox(
+        width: 210,
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, color: NrdColors.blue), const SizedBox(height: 12), Text(value, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900, color: NrdColors.navy)), const SizedBox(height: 3), Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: NrdColors.muted))]),
+          ),
+        ),
+      );
+}
+
+class ReportForm extends StatefulWidget {
+  const ReportForm({super.key, required this.state});
+  final AppState state;
+  @override
+  State<ReportForm> createState() => _ReportFormState();
+}
+
+class _ReportFormState extends State<ReportForm> {
+  int step = 0;
+  final title = TextEditingController();
+  final venue = TextEditingController();
+  final summary = TextEditingController();
+  RevivalCategory? category;
+  int attendance = 0;
+  int souls = 0;
+  bool declaration = false;
+
+  @override
+  void dispose() {
+    title.dispose();
+    venue.dispose();
+    summary.dispose();
+    super.dispose();
+  }
+
+  Future<void> save() async {
+    if (category == null || title.text.trim().isEmpty || !declaration) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Complete the title, category and declaration.')));
+      return;
+    }
+    await widget.state.enqueue('report', {
+      'title': title.text.trim(),
+      'activity_category_id': category!.id,
+      'activity_category_slug': category!.slug,
+      'event_date': DateTime.now().toIso8601String().split('T').first,
+      'venue': venue.text.trim(),
+      'attendance_total': attendance,
+      'souls_saved': souls,
+      'summary': summary.text.trim(),
+    });
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report saved safely to the synchronization queue.')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final content = <Widget>[
+      Column(children: [
+        TextField(controller: title, decoration: const InputDecoration(labelText: 'Report title *')),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<RevivalCategory>(initialValue: category, isExpanded: true, decoration: const InputDecoration(labelText: 'Activity category *'), items: widget.state.categories.map((item) => DropdownMenuItem(value: item, child: Text(item.name))).toList(), onChanged: (value) => setState(() => category = value)),
+        const SizedBox(height: 12),
+        TextField(controller: venue, decoration: const InputDecoration(labelText: 'Venue')),
+      ]),
+      TextFormField(initialValue: '0', keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Total attendance'), onChanged: (value) => attendance = int.tryParse(value) ?? 0),
+      TextFormField(initialValue: '0', keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Souls saved'), onChanged: (value) => souls = int.tryParse(value) ?? 0),
+      TextField(controller: summary, maxLines: 6, maxLength: 2000, decoration: const InputDecoration(labelText: 'Executive summary')),
+      CheckboxListTile(value: declaration, onChanged: (value) => setState(() => declaration = value ?? false), title: const Text('I confirm that this report is accurate and represents activities conducted within the stated jurisdiction.')),
+    ];
+    const titles = ['Activity', 'Participation', 'Impact', 'Narrative', 'Review'];
+    return Card(
+      margin: const EdgeInsets.all(20),
+      child: Stepper(
+        currentStep: step,
+        onStepContinue: step < 4 ? () => setState(() => step++) : save,
+        onStepCancel: step == 0 ? null : () => setState(() => step--),
+        steps: List.generate(5, (i) => Step(title: Text(titles[i]), isActive: i <= step, state: i < step ? StepState.complete : StepState.indexed, content: content[i])),
+      ),
+    );
+  }
+}
