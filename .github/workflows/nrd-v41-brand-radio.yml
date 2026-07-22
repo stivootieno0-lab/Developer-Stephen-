@@ -18,19 +18,36 @@ jobs:
           channel: stable
           cache: true
       - name: Create Flutter project and restore v4.1 source
+        id: restore
+        continue-on-error: true
         run: |
           set -euo pipefail
-          flutter create --platforms=android,web --org com.nationalrevivaldesk --project-name national_revival_desk app
-          cp nrd_v41/pubspec.yaml app/pubspec.yaml
-          base64 -d nrd_v41/flutter_v41_text.tar.gz.b64 > /tmp/v41-source.tar.gz
-          tar -xzf /tmp/v41-source.tar.gz -C app
-          mkdir -p app/assets/images
-          base64 -d nrd_v41/logo.png.b64 > app/assets/images/logo.png
-          base64 -d nrd_v41/nrd-crowd-hero.webp.b64 > app/assets/images/nrd-crowd-hero.webp
-          cp app/platform_overrides/android/AndroidManifest.xml app/android/app/src/main/AndroidManifest.xml
-          sed -i 's/android:foregroundServiceType="mediaPlayback"/android:foregroundServiceType="mediaPlayback" android:stopWithTask="false"/' app/android/app/src/main/AndroidManifest.xml
-          sed -i 's/android:label="national_revival_desk"/android:label="National Revival Desk"/' app/android/app/src/main/AndroidManifest.xml || true
-          sed -i 's/<title>national_revival_desk<\/title>/<title>National Revival Desk<\/title>/' app/web/index.html
+          {
+            wc -c nrd_v41/*.b64 nrd_v41/pubspec.yaml
+            flutter create --platforms=android,web --org com.nationalrevivaldesk --project-name national_revival_desk app
+            cp nrd_v41/pubspec.yaml app/pubspec.yaml
+            base64 --decode --ignore-garbage nrd_v41/flutter_v41_text.tar.gz.b64 > /tmp/v41-source.tar.gz
+            gzip -t /tmp/v41-source.tar.gz
+            tar -tzf /tmp/v41-source.tar.gz | head -40
+            tar -xzf /tmp/v41-source.tar.gz -C app
+            mkdir -p app/assets/images
+            base64 --decode --ignore-garbage nrd_v41/logo.png.b64 > app/assets/images/logo.png
+            base64 --decode --ignore-garbage nrd_v41/nrd-crowd-hero.webp.b64 > app/assets/images/nrd-crowd-hero.webp
+            file app/assets/images/logo.png app/assets/images/nrd-crowd-hero.webp
+            cp app/platform_overrides/android/AndroidManifest.xml app/android/app/src/main/AndroidManifest.xml
+            sed -i 's/android:foregroundServiceType="mediaPlayback"/android:foregroundServiceType="mediaPlayback" android:stopWithTask="false"/' app/android/app/src/main/AndroidManifest.xml
+            sed -i 's/android:label="national_revival_desk"/android:label="National Revival Desk"/' app/android/app/src/main/AndroidManifest.xml || true
+            sed -i 's/<title>national_revival_desk<\/title>/<title>National Revival Desk<\/title>/' app/web/index.html || true
+          } 2>&1 | tee restore.log
+      - name: Upload restoration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nrd-v4-1-restoration-log
+          path: restore.log
+          if-no-files-found: warn
+      - name: Enforce restoration
+        run: test '${{ steps.restore.outcome }}' = 'success'
       - name: Resolve and validate Flutter source
         working-directory: app
         run: |
