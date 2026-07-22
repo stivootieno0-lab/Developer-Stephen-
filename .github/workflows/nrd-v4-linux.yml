@@ -19,7 +19,7 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Create validated project and compile Linux app
+      - name: Create Linux-capable project
         run: |
           set -euo pipefail
           flutter create --platforms=android,web,linux --org com.nationalrevivaldesk --project-name national_revival_desk app
@@ -27,16 +27,33 @@ jobs:
           rm -rf app/lib app/test
           cp -a nrd_v4/simple/lib app/lib
           cp -a nrd_v4/simple/test app/test
-          cd app
+      - name: Validate source
+        working-directory: app
+        run: |
+          set -euo pipefail
           flutter pub get
           flutter analyze --no-fatal-infos --no-fatal-warnings
           flutter test
-          flutter build linux --release
+      - name: Compile native Linux application
+        id: compile
+        continue-on-error: true
+        working-directory: app
+        run: flutter build linux --release 2>&1 | tee ../linux-build.log
+      - name: Upload Linux compiler log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nrd-v4-linux-compiler-log
+          path: linux-build.log
+          if-no-files-found: warn
+      - name: Enforce Linux compilation
+        run: test '${{ steps.compile.outcome }}' = 'success'
       - name: Package portable DEB RPM and AppImage
         run: |
           set -euo pipefail
           mkdir -p release
           BUNDLE="$PWD/app/build/linux/x64/release/bundle"
+          test -x "$BUNDLE/national_revival_desk"
           tar -czf release/NationalRevivalDesk-v4.0.0-Linux-Portable-x64.tar.gz -C "$BUNDLE" .
           mkdir -p deb/DEBIAN deb/opt/national-revival-desk deb/usr/bin deb/usr/share/applications deb/usr/share/icons/hicolor/256x256/apps
           cp -a "$BUNDLE/." deb/opt/national-revival-desk/
