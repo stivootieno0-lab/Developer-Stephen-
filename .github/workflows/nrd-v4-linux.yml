@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install build and packaging dependencies
-        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev rpm wget file
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev rpm wget file
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -33,7 +33,9 @@ jobs:
         id: compile
         continue-on-error: true
         working-directory: app
-        run: flutter build linux --release 2>&1 | tee ../linux-build.log
+        run: |
+          set -o pipefail
+          flutter build linux --release 2>&1 | tee ../linux-build.log
       - name: Upload Linux compiler log
         if: always()
         uses: actions/upload-artifact@v4
@@ -77,7 +79,7 @@ jobs:
           Section: utils
           Priority: optional
           Architecture: amd64
-          Depends: libgtk-3-0, libstdc++6
+          Depends: libgtk-3-0, libstdc++6, gstreamer1.0-plugins-base
           Maintainer: National Revival Desk
           Description: National revival coordination, planning, reporting and radio application.
           EOF
@@ -99,7 +101,7 @@ jobs:
           License: Proprietary
           BuildArch: x86_64
           Source0: national-revival-desk-4.0.0.tar.gz
-          Requires: gtk3
+          Requires: gtk3, gstreamer1
           %description
           National Revival Desk multi-platform application.
           %install
