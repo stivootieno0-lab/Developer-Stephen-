@@ -28,9 +28,6 @@ jobs:
           rm -rf app/lib app/test
           cp -a nrd_v4/simple/lib app/lib
           cp -a nrd_v4/simple/test app/test
-          sed -i 's/com\.nationalrevivaldesk\.national_revival_desk/com.nationalrevivaldesk.app/g' app/android/app/build.gradle.kts
-          sed -i 's/android:label="national_revival_desk"/android:label="National Revival Desk"/' app/android/app/src/main/AndroidManifest.xml
-          sed -i 's/<title>national_revival_desk<\/title>/<title>National Revival Desk<\/title>/' app/web/index.html
       - name: Resolve packages
         working-directory: app
         run: flutter pub get
@@ -40,6 +37,11 @@ jobs:
       - name: Run tests
         working-directory: app
         run: flutter test
+      - name: Apply release branding
+        run: |
+          set -euo pipefail
+          sed -i 's/android:label="national_revival_desk"/android:label="National Revival Desk"/' app/android/app/src/main/AndroidManifest.xml
+          sed -i 's/<title>national_revival_desk<\/title>/<title>National Revival Desk<\/title>/' app/web/index.html
       - name: Build Android and Web/PWA
         working-directory: app
         run: |
@@ -67,8 +69,17 @@ jobs:
           jarsigner -verify -verbose -certs release/NationalRevivalDesk-v4.0.0.aab > release/AAB_SIGNATURE_REPORT.txt
           tar -czf release/NationalRevivalDesk-v4.0.0-web-pwa.tar.gz -C app/build/web .
           sha256sum release/NationalRevivalDesk-v4.0.0.apk release/NationalRevivalDesk-v4.0.0.aab release/NationalRevivalDesk-v4.0.0-web-pwa.tar.gz > release/checksums.txt
+          cat > release/BUILD_STATUS.txt <<EOF
+          Package ID: com.nationalrevivaldesk.national_revival_desk
+          Flutter source analysis: passed in dedicated diagnostics and release workflow
+          Flutter tests: passed in dedicated diagnostics and release workflow
+          APK: compiled, zip-aligned, privately signed and verified
+          AAB: compiled, privately signed and verified
+          Web/PWA: compiled with offline-first service worker
+          Physical-device installation: not performed in CI
+          EOF
           cat > private-signing/README_PRIVATE.txt <<EOF
-          Preserve this keystore and password securely. Every future update for com.nationalrevivaldesk.app must use the same key. Never upload it to public_html or source control.
+          Preserve this keystore and password securely. Every future update for com.nationalrevivaldesk.national_revival_desk must use the same key. Never upload it to public_html or source control.
           EOF
       - uses: actions/upload-artifact@v4
         with:
