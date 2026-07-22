@@ -19,6 +19,7 @@ jobs:
           cache: true
       - name: Create project and copy v4 source
         run: |
+          set -euo pipefail
           flutter create --platforms=android,web,linux --org org.nationalrevivaldesk --project-name national_revival_desk app
           cp nrd_v4/simple/pubspec.yaml app/pubspec.yaml
           rm -rf app/lib app/test
@@ -28,19 +29,25 @@ jobs:
         id: packages
         continue-on-error: true
         working-directory: app
-        run: flutter pub get 2>&1 | tee ../pub-get.log
+        run: |
+          set -o pipefail
+          flutter pub get 2>&1 | tee ../pub-get.log
       - name: Analyze source
         id: analyze
         if: steps.packages.outcome == 'success'
         continue-on-error: true
         working-directory: app
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee ../analyze.log
+        run: |
+          set -o pipefail
+          flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee ../analyze.log
       - name: Run tests
         id: tests
         if: steps.packages.outcome == 'success'
         continue-on-error: true
         working-directory: app
-        run: flutter test 2>&1 | tee ../test.log
+        run: |
+          set -o pipefail
+          flutter test 2>&1 | tee ../test.log
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
