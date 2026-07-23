@@ -1,0 +1,60 @@
+name: Build National Revival Desk APK
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'nrd-android/**'
+      - '.github/workflows/nrd-android-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android API 35 toolchain
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build installable APK
+        run: gradle --no-daemon -p nrd-android :app:assembleRelease --stacktrace
+
+      - name: Verify APK signature
+        run: |
+          APK='nrd-android/app/build/outputs/apk/release/NationalRevivalDesk-v4.0.0-release.apk'
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          sha256sum "$APK" > NationalRevivalDesk-v4.0.0-release.apk.sha256
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: National-Revival-Desk-v4.0.0-Android-APK
+          path: |
+            nrd-android/app/build/outputs/apk/release/NationalRevivalDesk-v4.0.0-release.apk
+            NationalRevivalDesk-v4.0.0-release.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
