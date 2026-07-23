@@ -1,0 +1,36 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.nationalrevivaldesk.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.nationalrevivaldesk.app'
+        minSdk 24
+        targetSdk 35
+        versionCode 40000
+        versionName '4.0.0'
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "NationalRevivalDesk-v4.0.0-${variant.buildType.name}.apk"
+        }
+    }
+}
