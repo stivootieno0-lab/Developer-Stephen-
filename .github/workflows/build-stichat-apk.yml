@@ -1,0 +1,76 @@
+name: Build Stichat Android APK
+
+on:
+  push:
+    branches:
+      - stichat-apk-build
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout isolated build branch
+        uses: actions/checkout@v4
+
+      - name: Reconstruct Stichat source package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat stichat-build/part-*.b64 > Stichat-source.b64
+          base64 --decode Stichat-source.b64 > Stichat-source.zip
+          echo "320ab3e81e6e5b76f47a708d39b18d2aabec01e296fb52e93612320c4011bd76  Stichat-source.zip" | sha256sum --check
+          unzip -q Stichat-source.zip
+          test -f android/app/src/main/AndroidManifest.xml
+          test -f backend/api/index.php
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android API 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Compile debug-signed APK
+        working-directory: android
+        shell: bash
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Verify and stage APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk dist/Stichat-v1.0.0-debug.apk
+          file dist/Stichat-v1.0.0-debug.apk
+          unzip -t dist/Stichat-v1.0.0-debug.apk >/dev/null
+          sha256sum dist/Stichat-v1.0.0-debug.apk | tee dist/Stichat-v1.0.0-debug.apk.sha256
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stichat-v1.0.0-debug-apk
+          path: |
+            dist/Stichat-v1.0.0-debug.apk
+            dist/Stichat-v1.0.0-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
