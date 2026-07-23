@@ -25,7 +25,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat stichat-build/part-*.b64 > Stichat-source.b64
+          cat \
+            stichat-build/part-00.b64 \
+            stichat-build/part-01.b64 \
+            stichat-build/part-02.b64 \
+            stichat-build/part-03a.b64 \
+            stichat-build/part-03b.b64 \
+            stichat-build/part-03c.b64 \
+            stichat-build/part-03d.b64 \
+            stichat-build/part-04.b64 \
+            stichat-build/part-05.b64 \
+            stichat-build/part-06.b64 > Stichat-source.b64
           base64 --decode Stichat-source.b64 > Stichat-source.zip
           echo "320ab3e81e6e5b76f47a708d39b18d2aabec01e296fb52e93612320c4011bd76  Stichat-source.zip" | sha256sum --check
           unzip -qo Stichat-source.zip
