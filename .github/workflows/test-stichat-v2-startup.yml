@@ -36,6 +36,7 @@ jobs:
           echo "86ae56a3466cc42d50fe0299c4da4e6bbb62c692ffcddae80877014b59d5d449  source.zip" | sha256sum --check
           unzip -qo source.zip
           cp stichat-v2-build/StichatApp.fixed.java android-source/app/src/main/java/com/stichat/app/StichatApp.java
+          sed -i 's/wrapper.addView(editText, new ViewGroup.LayoutParams(/wrapper.addView(editText, new LinearLayout.LayoutParams(/' android-source/app/src/main/java/com/stichat/app/Ui.java
           sed -i "s/versionCode 20/versionCode 21/; s/versionName '2.0.0'/versionName '2.0.1'/" android-source/app/build.gradle
           cat > android-source/gradle.properties <<'EOF'
           android.useAndroidX=true
