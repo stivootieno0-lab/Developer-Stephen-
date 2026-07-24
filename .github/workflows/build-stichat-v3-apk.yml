@@ -1,0 +1,157 @@
+name: Build Stichat v3 Native APK
+
+on:
+  push:
+    branches:
+      - stichat-v3-apk-build
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct and patch Stichat v3 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat \
+            stichat-v2-build/part-00.b64 \
+            stichat-v2-build/part-01.b64 \
+            stichat-v2-build/tail-00.b64 \
+            stichat-v2-build/tail-01-00.b64 \
+            stichat-v2-build/tail-01-01.b64 \
+            stichat-v2-build/tail-01-02.b64 \
+            stichat-v2-build/tail-02.b64 > source.b64
+          base64 --decode source.b64 > source.zip
+          echo "86ae56a3466cc42d50fe0299c4da4e6bbb62c692ffcddae80877014b59d5d449  source.zip" | sha256sum --check
+          unzip -qo source.zip
+
+          cp stichat-v2-build/StichatApp.fixed.java android-source/app/src/main/java/com/stichat/app/StichatApp.java
+          sed -i 's/wrapper.addView(editText, new ViewGroup.LayoutParams(/wrapper.addView(editText, new LinearLayout.LayoutParams(/' android-source/app/src/main/java/com/stichat/app/Ui.java
+          base64 --decode stichat-v3-build/AuthActivity.java.b64 > android-source/app/src/main/java/com/stichat/app/AuthActivity.java
+          sed -i "s/versionCode 20/versionCode 30/; s/versionName '2.0.0'/versionName '3.0.0'/" android-source/app/build.gradle
+          cat > android-source/gradle.properties <<'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8
+          EOF
+          grep -q '^import java.util.List;' android-source/app/src/main/java/com/stichat/app/ChatActivity.java || sed -i '/import java.util.Locale;/a import java.util.List;' android-source/app/src/main/java/com/stichat/app/ChatActivity.java
+          grep -q 'login_secure' android-source/app/src/main/java/com/stichat/app/AuthActivity.java
+          grep -q "versionName '3.0.0'" android-source/app/build.gradle
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android API 36
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Add startup regression tests
+        shell: bash
+        run: |
+          cat >> android-source/app/build.gradle <<'EOF'
+
+          android {
+              testOptions { unitTests.includeAndroidResources = true }
+          }
+          dependencies {
+              testImplementation 'junit:junit:4.13.2'
+              testImplementation 'androidx.test:core:1.6.1'
+              testImplementation 'org.robolectric:robolectric:4.14.1'
+          }
+          EOF
+          mkdir -p android-source/app/src/test/java/com/stichat/app
+          cat > android-source/app/src/test/java/com/stichat/app/StartupTest.java <<'EOF'
+          package com.stichat.app;
+
+          import static org.junit.Assert.assertEquals;
+          import static org.junit.Assert.assertFalse;
+          import static org.junit.Assert.assertNotNull;
+          import android.content.Intent;
+          import android.os.Looper;
+          import androidx.test.core.app.ApplicationProvider;
+          import org.junit.Test;
+          import org.junit.runner.RunWith;
+          import org.robolectric.Robolectric;
+          import org.robolectric.RobolectricTestRunner;
+          import org.robolectric.Shadows;
+          import org.robolectric.android.controller.ActivityController;
+          import org.robolectric.annotation.Config;
+
+          @RunWith(RobolectricTestRunner.class)
+          @Config(sdk = 35)
+          public class StartupTest {
+              @Test public void applicationCanInitialize() {
+                  StichatApp app = ApplicationProvider.getApplicationContext();
+                  assertNotNull(app);
+                  assertNotNull(StichatApp.get());
+              }
+              @Test public void launcherRoutesToAuthentication() {
+                  SessionStore.get(ApplicationProvider.getApplicationContext()).clear();
+                  ActivityController<MainActivity> main = Robolectric.buildActivity(MainActivity.class).setup();
+                  Shadows.shadowOf(Looper.getMainLooper()).idle();
+                  Intent next = Shadows.shadowOf(main.get()).getNextStartedActivity();
+                  assertNotNull(next);
+                  assertNotNull(next.getComponent());
+                  assertEquals(AuthActivity.class.getName(), next.getComponent().getClassName());
+              }
+              @Test public void authenticationScreenCreates() {
+                  SessionStore.get(ApplicationProvider.getApplicationContext()).clear();
+                  ActivityController<AuthActivity> auth = Robolectric.buildActivity(AuthActivity.class).setup();
+                  Shadows.shadowOf(Looper.getMainLooper()).idle();
+                  assertNotNull(auth.get());
+                  assertFalse(auth.get().isFinishing());
+              }
+          }
+          EOF
+
+      - name: Run startup tests
+        working-directory: android-source
+        run: gradle :app:testDebugUnitTest --tests com.stichat.app.StartupTest --stacktrace --no-daemon
+
+      - name: Compile native APK
+        working-directory: android-source
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Verify and stage APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp android-source/app/build/outputs/apk/debug/app-debug.apk dist/Stichat-v3.0.0-native-debug.apk
+          file dist/Stichat-v3.0.0-native-debug.apk
+          unzip -t dist/Stichat-v3.0.0-native-debug.apk >/dev/null
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs dist/Stichat-v3.0.0-native-debug.apk | tee dist/apksigner-verification.txt
+          sha256sum dist/Stichat-v3.0.0-native-debug.apk | tee dist/Stichat-v3.0.0-native-debug.apk.sha256
+
+      - name: Upload Stichat v3 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stichat-v3.0.0-native-debug-apk
+          path: |
+            dist/Stichat-v3.0.0-native-debug.apk
+            dist/Stichat-v3.0.0-native-debug.apk.sha256
+            dist/apksigner-verification.txt
+            android-source/app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: error
+          retention-days: 7
