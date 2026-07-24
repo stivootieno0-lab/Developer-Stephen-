@@ -41,6 +41,7 @@ jobs:
           android.enableJetifier=true
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
           EOF
+          sed -i '/import java.util.Locale;/a import java.util.List;' android-source/app/src/main/java/com/stichat/app/ChatActivity.java
           test -f android-source/app/src/main/AndroidManifest.xml
           test -f android-source/app/src/main/java/com/stichat/app/MainActivity.java
 
