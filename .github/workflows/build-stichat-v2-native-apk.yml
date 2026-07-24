@@ -15,7 +15,7 @@ permissions:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 35
 
     steps:
       - name: Checkout isolated build branch
@@ -54,12 +54,12 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android build and emulator components
+      - name: Install Android API 36
         shell: bash
         run: |
           set -euo pipefail
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "emulator" "system-images;android-35;google_apis;x86_64"
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle 8.13
         uses: gradle/actions/setup-gradle@v4
@@ -71,41 +71,43 @@ jobs:
         shell: bash
         run: gradle :app:assembleDebug --stacktrace --no-daemon
 
-      - name: Create Android emulator
+      - name: Prepare startup smoke test
         shell: bash
         run: |
-          set -euo pipefail
-          echo no | avdmanager create avd -n stichat-ci -k "system-images;android-35;google_apis;x86_64" --force
-          sudo chmod 666 /dev/kvm || true
-          nohup emulator -avd stichat-ci -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot > emulator.log 2>&1 &
-          adb wait-for-device
-          for i in $(seq 1 120); do
-            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then break; fi
-            sleep 2
-          done
-          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
-          adb shell input keyevent 82 || true
-
-      - name: Install and launch APK smoke test
-        shell: bash
-        run: |
+          cat > smoke-test.sh <<'EOF'
+          #!/usr/bin/env bash
           set -euo pipefail
           APK="android-source/app/build/outputs/apk/debug/app-debug.apk"
           adb install -r "$APK"
           adb logcat -c
           adb shell am force-stop com.stichat.app.debug || true
           adb shell am start -W -n com.stichat.app.debug/com.stichat.app.MainActivity | tee launch-result.txt
-          sleep 8
+          sleep 10
           adb logcat -d -v threadtime > startup-logcat.txt
           adb shell pidof com.stichat.app.debug > app-pid.txt || true
-          if grep -E "FATAL EXCEPTION|AndroidRuntime.*Process: com\.stichat\.app\.debug" startup-logcat.txt; then
-            echo "Startup crash detected"
+          grep -E "FATAL EXCEPTION|AndroidRuntime.*Process: com\.stichat\.app\.debug" startup-logcat.txt > fatal-startup.txt || true
+          if [ -s fatal-startup.txt ]; then
+            cat fatal-startup.txt
             exit 1
           fi
           if [ ! -s app-pid.txt ]; then
             echo "App process is not alive after launch"
             exit 1
           fi
+          echo "Stichat process $(cat app-pid.txt) remained alive after startup."
+          EOF
+          chmod +x smoke-test.sh
+
+      - name: Install and launch on Android 15 emulator
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-boot-timeout: 600
+          script: ./smoke-test.sh
 
       - name: Upload startup diagnostics
         if: always()
@@ -113,9 +115,9 @@ jobs:
         with:
           name: Stichat-v2-startup-diagnostics
           path: |
-            emulator.log
             launch-result.txt
             startup-logcat.txt
+            fatal-startup.txt
             app-pid.txt
           if-no-files-found: warn
           retention-days: 7
