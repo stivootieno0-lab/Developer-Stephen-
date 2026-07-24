@@ -38,7 +38,32 @@ jobs:
 
           cp stichat-v2-build/StichatApp.fixed.java android-source/app/src/main/java/com/stichat/app/StichatApp.java
           sed -i 's/wrapper.addView(editText, new ViewGroup.LayoutParams(/wrapper.addView(editText, new LinearLayout.LayoutParams(/' android-source/app/src/main/java/com/stichat/app/Ui.java
-          base64 --decode stichat-v3-build/AuthActivity.java.b64 > android-source/app/src/main/java/com/stichat/app/AuthActivity.java
+
+          git fetch --depth=1 origin stichat-v3-apk-build
+          git show FETCH_HEAD:stichat-v3-build/AuthActivity.java.b64 | base64 --decode > android-source/app/src/main/java/com/stichat/app/AuthActivity.java
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android-source/app/src/main/java/com/stichat/app/AuthActivity.java')
+          text = p.read_text()
+          replacements = {
+              'Secure registration opens the Stichat web portal so email verification, SMS verification and terms acceptance can be completed correctly.':
+                  'Secure registration opens the Stichat web portal so email verification and terms acceptance can be completed correctly.',
+              'After completing email and mobile verification, return here and sign in.':
+                  'After verifying your email address, return here and sign in.',
+              'Username, phone or email': 'Email or username',
+              'Enter your account identity and password.': 'Enter your email or username and password.',
+              'input.setHint(method.equals("totp") ? "Authenticator or recovery code" : "Six-digit code");':
+                  'input.setHint(method.equals("totp") ? "Authenticator or recovery code" : "Email verification code");',
+              '.setMessage("Enter the code delivered through " + method + ".")':
+                  '.setMessage(method.equals("totp") ? "Enter the code from your authenticator app or a recovery code." : "Enter the six-digit code sent to your verified email address.")',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'Missing expected authentication text: {old}')
+              text = text.replace(old, new)
+          p.write_text(text)
+          PY
+
           sed -i "s/versionCode 20/versionCode 31/; s/versionName '2.0.0'/versionName '3.1.0'/" android-source/app/build.gradle
           cat > android-source/gradle.properties <<'EOF'
           android.useAndroidX=true
