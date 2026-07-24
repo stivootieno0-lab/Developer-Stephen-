@@ -36,6 +36,11 @@ jobs:
           base64 --decode Stichat-v2-android-source.b64 > Stichat-v2-android-source.zip
           echo "86ae56a3466cc42d50fe0299c4da4e6bbb62c692ffcddae80877014b59d5d449  Stichat-v2-android-source.zip" | sha256sum --check
           unzip -qo Stichat-v2-android-source.zip
+          cat > android-source/gradle.properties <<'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          EOF
           test -f android-source/app/src/main/AndroidManifest.xml
           test -f android-source/app/src/main/java/com/stichat/app/MainActivity.java
 
