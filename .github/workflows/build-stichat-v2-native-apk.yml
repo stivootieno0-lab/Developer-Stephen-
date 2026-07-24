@@ -21,7 +21,7 @@ jobs:
       - name: Checkout isolated build branch
         uses: actions/checkout@v4
 
-      - name: Reconstruct and verify Android source
+      - name: Reconstruct and patch Android source
         shell: bash
         run: |
           set -euo pipefail
@@ -36,12 +36,14 @@ jobs:
           base64 --decode Stichat-v2-android-source.b64 > Stichat-v2-android-source.zip
           echo "86ae56a3466cc42d50fe0299c4da4e6bbb62c692ffcddae80877014b59d5d449  Stichat-v2-android-source.zip" | sha256sum --check
           unzip -qo Stichat-v2-android-source.zip
+          cp stichat-v2-build/StichatApp.fixed.java android-source/app/src/main/java/com/stichat/app/StichatApp.java
+          sed -i "s/versionCode 20/versionCode 21/; s/versionName '2.0.0'/versionName '2.0.1'/" android-source/app/build.gradle
           cat > android-source/gradle.properties <<'EOF'
           android.useAndroidX=true
           android.enableJetifier=true
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
           EOF
-          sed -i '/import java.util.Locale;/a import java.util.List;' android-source/app/src/main/java/com/stichat/app/ChatActivity.java
+          grep -q '^import java.util.List;' android-source/app/src/main/java/com/stichat/app/ChatActivity.java || sed -i '/import java.util.Locale;/a import java.util.List;' android-source/app/src/main/java/com/stichat/app/ChatActivity.java
           test -f android-source/app/src/main/AndroidManifest.xml
           test -f android-source/app/src/main/java/com/stichat/app/MainActivity.java
 
@@ -113,7 +115,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Stichat-v2-startup-diagnostics
+          name: Stichat-v2.0.1-startup-diagnostics
           path: |
             launch-result.txt
             startup-logcat.txt
