@@ -60,16 +60,38 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Compile native debug APK
+      - name: Compile native debug APK and capture diagnostics
         working-directory: android-source
         shell: bash
-        run: gradle :app:assembleDebug --stacktrace --no-daemon
+        run: |
+          mkdir -p ../dist
+          set +e
+          gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee ../dist/gradle-build.log
+          code=${PIPESTATUS[0]}
+          echo "$code" > ../dist/gradle-exit-code.txt
+          exit 0
+
+      - name: Upload compiler diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stichat-v2-gradle-diagnostics
+          path: |
+            dist/gradle-build.log
+            dist/gradle-exit-code.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Check compile result
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat dist/gradle-exit-code.txt)" = "0"
 
       - name: Verify and stage APK
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p dist
           cp android-source/app/build/outputs/apk/debug/app-debug.apk dist/Stichat-v2.0.0-native-debug.apk
           file dist/Stichat-v2.0.0-native-debug.apk
           unzip -t dist/Stichat-v2.0.0-native-debug.apk >/dev/null
